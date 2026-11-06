@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.10
+  Dither — prototype 0.11
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -20,7 +20,7 @@
   const TANK = { w: 90, h: 26, d: 40 };            // long, low and shallow
   const MAX_POMS = 10;
   const FOCUS_MIN = 25, REST_MIN = 5;
-  const STORE_KEY = 'dither.v09';
+  const STORE_KEY = 'dither.v11';
   const APP = 'Dither';
   const FONT_MONO = '"Menlo", "SF Mono", "DejaVu Sans Mono", "Consolas", monospace';
   const FONT_UI = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -141,7 +141,7 @@
 
   // ================================================================ state + persistence
   const today = () => new Date().toDateString();
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v09') || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
   const state = {
     seed: saved.seed || '',
     shape: SHAPES[saved.shape] ? saved.shape : 'box',
@@ -276,6 +276,32 @@
     }
   `;
 
+  // uTrans: x = style (1 static dissolve, 2 dither, 3 dither + static), y = how much is gone (0..1)
+  const TRANS_GLSL = /* glsl */`
+    uniform vec3 uTrans;
+    float bayer8(vec2 p) {
+      vec2 a = mod(p, 2.0), b = mod(floor(p / 2.0), 2.0), c = mod(floor(p / 4.0), 2.0);
+      float v = mod(2.0 * a.x + 3.0 * a.y, 4.0) * 16.0 + mod(2.0 * b.x + 3.0 * b.y, 4.0) * 4.0 + mod(2.0 * c.x + 3.0 * c.y, 4.0);
+      return (v + 0.5) / 64.0;
+    }
+    float th(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    // 0: draw normally, 1: gone, 2: draw as static
+    int transState(vec3 w) {
+      int st = int(uTrans.x + 0.5); float v = uTrans.y;
+      if (st == 0 || v <= 0.001) return 0;
+      vec2 c = floor(gl_FragCoord.xy); float fr = floor(uTime * 24.0);
+      if (st == 1) {
+        float band = 0.6 + 0.4 * sin(c.y * 0.7 + uTime * 30.0) * sin(c.y * 0.11 - uTime * 7.0);
+        return th(c + fr * 17.31) < v * 1.02 * band ? 2 : 0;
+      }
+      float yN = clamp((w.y + 3.0) / (${TANK.h}.0 + 16.0), 0.0, 1.0);
+      float t = 0.6 * bayer8(c) + 0.4 * (1.0 - yN);        // tops go first; bottoms come back first
+      if (st == 3 && t < v + 0.06 && t > v - 0.09 && th(c + fr * 5.7) < 0.75) return 2;   // a band of static at the edge
+      return t < v ? 1 : 0;
+    }
+  `;
+  const TRANS_HAZE = /* glsl */`{ int ts_ = transState(vW); if (ts_ == 1) discard; if (ts_ == 2) { gl_FragColor = vec4(th(floor(gl_FragCoord.xy) * 1.7 + floor(uTime * 24.0)), ${M.haze}.0 / 63.0, 0.0, 0.0); return; } }`;
+
   const SCENE_VERT = /* glsl */`
     attribute float aMat; attribute float aSway; attribute float aPhase; attribute vec3 aTan; attribute float aLum; attribute float aBirth;
     uniform float uTime, uWater, uPointSize;
@@ -323,6 +349,7 @@
     varying vec3 vW; varying vec3 vN; varying float vMat; varying vec2 vDir; varying float vOrient;
     varying float vPhase; varying float vLum; varying float vViewZ; varying float vBirth;
     ${COMMON}
+    ${TRANS_GLSL}
     void main() {
       if (vBirth > uGrowth + 0.0001) discard;
       int m = int(vMat + 0.5);
@@ -334,11 +361,12 @@
           float d = shapeNorm(vW.xz - uShadeOff * t);
           sh = max(sh, (1.0 - smoothstep(0.96, 1.12 + 0.35 * t, d)) * (1.0 - 0.55 * t));
         }
-        sh *= uShade * (1.0 - 0.9 * uGlow);
+        sh *= uShade * (1.0 - 0.9 * uGlow) * (1.0 - clamp(uTrans.y * 1.5, 0.0, 1.0));   // the shadow just fades during a swap
         if (sh < 0.04) discard;
         gl_FragColor = vec4(sh, ${M.shade}.0 / 63.0, 0.0, 0.0);
         return;
       }
+      ${TRANS_HAZE}
       vec3 N = normalize(vN + vec3(0.0, 1e-4, 0.0)); if (!gl_FrontFacing) N = -N;
       vec3 L = normalize(uLightDir);
       float diff = max(dot(N, L), 0.0);
@@ -411,8 +439,10 @@
     uniform float uTime, uWater, uLight;
     varying vec3 vW; varying vec3 vNw;
     ${COMMON}
+    ${TRANS_GLSL}
     void main() {
       if (vW.y > uWater) discard;
+      ${TRANS_HAZE}
       if (dot(vNw, cameraPosition - vW) > 0.0) discard;   // only the far walls
       float depthN = clamp((uWater - vW.y) / max(uWater, 1.0), 0.0, 1.0);
       float lum = 0.06 + 0.16 * (1.0 - depthN);
@@ -441,8 +471,10 @@
     uniform vec3 uLightDir;
     varying vec3 vW; varying float vH;
     ${COMMON}
+    ${TRANS_GLSL}
     void main() {
       if (shapeNorm(vW.xz) > 0.995) discard;
+      ${TRANS_HAZE}
       float e = 0.6;
       float hx = waveH(vW.xz + vec2(e, 0.0), uTime) - waveH(vW.xz - vec2(e, 0.0), uTime);
       float hz = waveH(vW.xz + vec2(0.0, e), uTime) - waveH(vW.xz - vec2(0.0, e), uTime);
@@ -457,19 +489,21 @@
 
   const LINE_VERT = /* glsl */`
     uniform float uTime, uWater;
-    varying float vH;
+    varying float vH; varying vec3 vW;
     ${COMMON}
     void main() {
       vec4 w = modelMatrix * vec4(position, 1.0);
       float h = waveH(w.xz, uTime); vH = h;
-      w.y = uWater + h * 1.2;
+      w.y = uWater + h * 1.2; vW = w.xyz;
       gl_Position = projectionMatrix * viewMatrix * w;
     }
   `;
   const LINE_FRAG = /* glsl */`
-    uniform float uLight;
-    varying float vH;
+    uniform float uLight, uTime;
+    varying float vH; varying vec3 vW;
+    ${TRANS_GLSL}
     void main() {
+      ${TRANS_HAZE}
       float lum = (0.55 + vH * 1.5) * (0.55 + 0.45 * uLight);
       gl_FragColor = vec4(clamp(lum, 0.0, 1.0), ${M.waterline}.0 / 63.0, 0.0, 0.0);
     }
@@ -666,7 +700,7 @@
     uPointSize: { value: 1 }, uViewPx: { value: new T.Vector2(1, 1) }, uCamDist: { value: 100 },
     uRip: { value: Array.from({ length: 8 }, () => new T.Vector4(0, 0, -99, 0)) },
     uFlash: { value: 0 }, uMGlow: { value: 0 }, uBaseHover: { value: 0 }, uStatic: { value: 0 },
-    uShade: { value: 0 }, uShadeOff: { value: new T.Vector2(0, 6) },
+    uShade: { value: 0 }, uShadeOff: { value: new T.Vector2(0, 6) }, uTrans: { value: new T.Vector3(0, 0, 0) },
     uFlow: { value: new T.Vector3(1, 0.2, 0.12) }, uLightDir: { value: new T.Vector3(-0.3, 1, 0.35) },
     uShape: { value: new T.Vector4(45, 20, 4, 0) }, uShapePh: { value: new T.Vector3() },
   };
@@ -1404,7 +1438,9 @@
     uniform sampler2D uLabel; uniform float uTime, uWater, uLight; uniform vec3 uLightDir;
     varying vec2 vUv; varying vec3 vW; varying vec3 vN;
     ${COMMON}
+    ${TRANS_GLSL}
     void main() {
+      ${TRANS_HAZE}
       vec2 c = vUv - 0.5; float r = length(c) * 2.0;
       if (r > 1.0 || r < 0.15) discard;
       vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
@@ -1437,7 +1473,7 @@
     labelTex.needsUpdate = true;
   }
   const cdMat = new T.ShaderMaterial({
-    uniforms: { uLabel: { value: labelTex }, uTime: U.uTime, uWater: U.uWater, uLight: U.uLight, uLightDir: U.uLightDir, uRip: U.uRip, uShape: U.uShape, uShapePh: U.uShapePh },
+    uniforms: { uLabel: { value: labelTex }, uTrans: U.uTrans, uTime: U.uTime, uWater: U.uWater, uLight: U.uLight, uLightDir: U.uLightDir, uRip: U.uRip, uShape: U.uShape, uShapePh: U.uShapePh },
     vertexShader: CD_VERT, fragmentShader: CD_FRAG, side: T.DoubleSide,
   });
 
@@ -2291,7 +2327,7 @@
     state.seed = randomSeed(); state.growth = 0; state.evap = 0;
     state.shape = Math.random() < 0.35 ? 'oval' : 'box';       // most tanks are rectangular; about 1 in 3 comes up oval
     exitGrowthPreview();
-    withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); showUndo(prev); });
+    withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }, () => showUndo(prev));      // undo's 4 seconds start once the new tank has filled in
   }
   // the haze shell: the tank's own outline, a hair outside the glass, from under the base to above the rim
   const HAZE_VERT = /* glsl */`void main() { gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); }`;
@@ -2320,28 +2356,41 @@
   }
   // like a radio between stations: the dots break into static, the new tank swaps in underneath, then it tunes in
   let staticAnim = null;
-  function withStatic(swap) {
+  function withStatic(swap, after) {
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce || staticAnim) { swap(); return; }
-    staticAnim = { phase: 'out', t: 0, swap };
+    if (reduce || staticAnim) { swap(); if (after) after(); return; }
+    staticAnim = { phase: 'out', t: 0, swap, after };
+  }
+  const TRANS = [
+    { name: 'shell static', out: 0.6, in: 1.5, waver: true },      // v0.10's: haze on a shell around the glass (slowed down)
+    { name: 'static dissolve', out: 0.8, in: 1.7, waver: true },   // every surface breaks into flickering static
+    { name: 'dither', out: 1.0, in: 1.85, waver: false, gentle: true },   // ~30% slower than the lab, steady through the middle so every band shows          // ordered-dither fade: tops vanish first, the new tank fills in from the bottom
+    { name: 'dither + static', out: 0.8, in: 1.5, waver: false },  // the same, with a band of static riding the edge
+  ];
+  let transStyle = 2;      // dither: tops dissolve first, the new tank fills in from the bottom
+  function setTrans(v) {
+    if (transStyle === 0) { U.uStatic.value = v; U.uTrans.value.set(0, 0, 0); }
+    else { U.uStatic.value = 0; U.uTrans.value.set(transStyle, v, 0); }
   }
   function stepStatic(dt) {
     const a = staticAnim; if (!a) return;
     a.t += Math.min(dt, 0.06);
-    const OUT = 0.34, IN = 0.85;
+    const S = TRANS[transStyle];
     if (a.phase === 'out') {
-      U.uStatic.value = ease(Math.min(1, a.t / OUT));
-      if (a.t >= OUT) { a.phase = 'swap'; setTimeout(() => { a.swap(); a.phase = 'in'; a.t = 0; }, 0); }
+      const uo = Math.min(1, a.t / S.out);
+      setTrans(S.gentle ? 0.5 - 0.5 * Math.cos(Math.PI * uo) : ease(uo));
+      if (a.t >= S.out) { a.phase = 'swap'; setTimeout(() => { a.swap(); a.phase = 'in'; a.t = 0; }, 0); }
     } else if (a.phase === 'hold') {
-      /* test hook: keep whatever value was set */
+      /* test hook */
     } else if (a.phase === 'swap') {
-      U.uStatic.value = 1;
+      setTrans(1);
     } else {
-      const u = Math.min(1, a.t / IN);
-      U.uStatic.value = u >= 1 ? 0 : Math.pow(1 - u, 1.3) * (0.72 + 0.28 * Math.cos(u * 15));      // wavers before it locks on
-      if (u >= 1) staticAnim = null;
+      const u = Math.min(1, a.t / S.in);
+      setTrans(u >= 1 ? 0 : S.waver ? Math.pow(1 - u, 1.3) * (0.72 + 0.28 * Math.cos(u * 15)) : S.gentle ? 0.5 + 0.5 * Math.cos(Math.PI * u) : 1 - ease(u));
+      if (u >= 1) { staticAnim = null; if (a.after) a.after(); }
     }
   }
+
   $('rescapeBtn').onclick = rescape;
   $('tune').onclick = () => { const on = !$('drawer').classList.contains('on'); $('drawer').classList.toggle('on', on); $('tune').setAttribute('aria-expanded', on); $('tune').classList.toggle('on', on); };
   $('timerHit').onclick = timerPress;
@@ -2623,8 +2672,10 @@
     lastCost = lastCost * 0.9 + (performance.now() - t0) * 0.1;
     if (++statTick % 24 === 0) $('stats').innerHTML = `${grid.cols}×${grid.rows} dots · ${FPS} fps · ${lastCost.toFixed(1)} ms<br>${terrain.layout} · ${terrain.tone.name} · ${terrain.woodStyle}<br>sky ≈ ${tzName || 'unknown'}`;
   }
+  let manualMode = false, fakeNow = 0;
   function loop(now) {
     requestAnimationFrame(loop);
+    if (manualMode) return;
     if (now - lastRender < 1000 / FPS - 2) return;
     lastRender = now;
     renderFrame(now);
@@ -2650,6 +2701,10 @@
     foundScreen() { if (!found) return null; const p = found.root.position.clone().add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
     setZoom(z) { state.zoom = state.zoomTarget = z; },
     slow(f) { timeScale = f; },
+    manual() { manualMode = true; fakeNow = performance.now(); lastSim = fakeNow; },
+    tick(dt) { fakeNow += dt * 1000; renderFrame(fakeNow); },
+    setTransStyle(i) { transStyle = i; },
+    transNow() { return staticAnim ? staticAnim.phase : 'idle'; },
     staticNow() { return +U.uStatic.value.toFixed(2); },
     freezeStatic(v) { staticAnim = { phase: 'hold', t: 0, swap() {} }; U.uStatic.value = v; },
     baseBox() { let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (let k = 0; k < 24; k++) { const p = boundary((k / 24) * Math.PI * 2, 1.07).setY(-2.6).project(camera); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); } return { x0, x1, y0, tank: tankScreenBox().y0, rows: grid.rows * grid.chCss }; },
