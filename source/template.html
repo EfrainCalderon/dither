@@ -115,6 +115,9 @@
   /* ---------- about: a black card whose edge glows in halftone dots; nothing blurred behind it */
   .about { position: fixed; inset: 0; z-index: 7; display: grid; place-items: center; background: transparent; visibility: hidden; pointer-events: none; }
   .about.on { visibility: visible; pointer-events: auto; }
+  /* the card is see-through glass, so the controls step back while it's open instead of showing through it */
+  .dock, .rdock, .timer-actions, .tune { transition: opacity 220ms ease; }
+  body.about-open :is(.dock, .rdock, .timer-actions, .tune) { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms ease, visibility 0s 220ms; }
   .glass { --ink: var(--card-ink, #143650); --line: color-mix(in srgb, var(--ink) 30%, transparent);
            position: relative; width: min(500px, calc(100vw - 32px)); padding: 46px 40px 38px; border-radius: 34px; display: grid; gap: 18px; justify-items: center; text-align: center;
            background: color-mix(in srgb, var(--card-bg, #8fbde6) 80%, transparent); transition: background-color 3s ease; }

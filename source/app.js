@@ -1,5 +1,5 @@
 /*
-  Dither 1.2.1
+  Dither 1.2.2
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -2457,8 +2457,8 @@
 
   // ---- about: halftone glass with the name, credit and coffee
   const about = $('about');
-  function openAbout() { drawAboutEdge(); about.classList.add('on'); ditherEl(about, true, 420); $('aboutBtn').setAttribute('aria-expanded', 'true'); setTimeout(() => $('aboutClose').focus(), 50); }
-  function closeAbout() { $('aboutBtn').setAttribute('aria-expanded', 'false'); $('aboutBtn').focus(); ditherEl(about, false, 360, () => { about.classList.remove('on'); setMask(about, null); }); }
+  function openAbout() { drawAboutEdge(); document.body.classList.add('about-open'); about.classList.add('on'); ditherEl(about, true, 420); $('aboutBtn').setAttribute('aria-expanded', 'true'); setTimeout(() => $('aboutClose').focus(), 50); }
+  function closeAbout() { document.body.classList.remove('about-open'); $('aboutBtn').setAttribute('aria-expanded', 'false'); $('aboutBtn').focus(); ditherEl(about, false, 360, () => { about.classList.remove('on'); setMask(about, null); }); }
   // dots around the card, big at the edge and shrinking with distance: a glow made of halftone
   function drawAboutEdge() {
     const cv = $('aboutEdge'), card = cv.parentElement, pad = 48;
