@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.8
+  Dither — prototype 0.9
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -20,7 +20,7 @@
   const TANK = { w: 90, h: 26, d: 40 };            // long, low and shallow
   const MAX_POMS = 10;
   const FOCUS_MIN = 25, REST_MIN = 5;
-  const STORE_KEY = 'dither.v08';
+  const STORE_KEY = 'dither.v09';
   const APP = 'Dither';
   const FONT_MONO = '"Menlo", "SF Mono", "DejaVu Sans Mono", "Consolas", monospace';
   const FONT_UI = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -32,7 +32,7 @@
     beadA: 30, beadB: 31, ticket: 32, usb: 33, usbMetal: 34, pebble: 35, cowrie: 36,
     fishOrange: 40, fishRed: 41, fishWhite: 42, fishBlack: 43, fishGold: 44, fishBlue: 45, fishBronze: 46,
     base: 47, glow: 48, digit: 49, diverSuit: 50, glassDark: 51, paper: 52, shellPink: 53, floppy: 54,
-    masonBrass: 55, cdFace: 56, cdInk: 57, cdA: 58, cdB: 59, cdC: 60, drop: 61,
+    masonBrass: 55, cdFace: 56, cdInk: 57, cdA: 58, cdB: 59, cdC: 60, drop: 61, haze: 62,
   };
   const ROWS = 64;
 
@@ -141,7 +141,7 @@
 
   // ================================================================ state + persistence
   const today = () => new Date().toDateString();
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
   const state = {
     seed: saved.seed || '',
     shape: SHAPES[saved.shape] ? saved.shape : 'box',
@@ -216,7 +216,9 @@
     return r / wobble(Math.atan2(z / shape.b, x / shape.a));
   }
   function boundary(th, s = 1) {
-    const c = Math.cos(th), sn = Math.sin(th), e = 2 / shape.n;
+    let c = Math.cos(th), sn = Math.sin(th);
+    if (Math.abs(c) < 1e-9) c = 0; if (Math.abs(sn) < 1e-9) sn = 0;     // cos(2π) etc. aren't exactly 0/1; the power below magnifies that into a visible gap
+    const e = 2 / shape.n;
     const x = shape.a * Math.sign(c) * Math.pow(Math.abs(c), e), z = shape.b * Math.sign(sn) * Math.pow(Math.abs(sn), e);
     const k = wobble(Math.atan2(z / shape.b, x / shape.a)) * s;
     return V(x * k, 0, z * k);
@@ -487,7 +489,6 @@
 
   const ASCII_VERT = /* glsl */`void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`;
   const ASCII_FRAG = /* glsl */`
-    uniform float uStatic; uniform vec4 uStaticRect;
     uniform sampler2D uScene, uAtlas, uPal, uOverlay, uLbl;
     uniform vec4 uLblRect; uniform float uLblF;
     uniform vec2 uCellPx, uOffset, uGrid, uRes;
@@ -523,18 +524,6 @@
       vec2 q = inC - uCellPx * 0.5;
       float rMax = 0.5 * min(uCellPx.x, uCellPx.y);
       vec4 s = texelFetch(uScene, ivec2(cell), 0);
-      // tuning static over the tank while a new one swaps in
-      float stat = 0.0; float fr = floor(uTime * 24.0);
-      if (uStatic > 0.002) {
-        vec2 e2 = min(cell - uStaticRect.xy, uStaticRect.zw - cell);
-        float edge = smoothstep(-1.0, 7.0, min(e2.x, e2.y));
-        stat = uStatic * edge;
-        if (stat > 0.0) {
-          float band = hash12(vec2(floor(cell.y / 3.0), fr));                       // rows slip sideways, like a bad signal
-          float shift = band > 1.0 - stat * 0.7 ? floor((hash12(vec2(cell.y, fr + 3.0)) - 0.5) * 18.0 * stat) : 0.0;
-          s = texelFetch(uScene, ivec2(clamp(cell + vec2(shift, 0.0), vec2(0.0), uGrid - 1.0)), 0);
-        }
-      }
       int id = int(s.g * 63.0 + 0.5);
 
       // timer floating above the tank (when it isn't in the water)
@@ -574,16 +563,14 @@
           bg = mix(bg, uGlowCol, m * 0.75 * gg + 0.08 * gg);
         }
       }
-      if (stat > 0.0) {
-        float n = hash12(cell + fr * 17.31);
-        float rows = 0.6 + 0.4 * sin(cell.y * 0.9 + uTime * 30.0);                 // faint rolling bands in the noise
-        if (n < stat * 0.8 * rows) {
-          float h2 = hash12(cell * 1.73 + fr);
-          float r = rMax * (0.3 + 0.7 * h2);
-          float m = 1.0 - smoothstep(r - 0.8, r + 0.8, length(q));
-          vec3 c = mix(uOverlayCol * 0.9, vec3(0.93, 0.97, 1.0), hash12(cell * 3.1 + fr + 7.0));
-          gl_FragColor = vec4(mix(bg, c, m), 1.0); return;
-        }
+      // haze: a dot in the sky's own color, a little lighter or darker, so the tank dissolves into its surroundings
+      if (id == ${M.haze}) {
+        float hv = s.r;
+        float r = rMax * (0.45 + 0.55 * hv);
+        float m = 1.0 - smoothstep(r - 0.8, r + 0.8, length(q));
+        float lb = dot(bg, vec3(0.2126, 0.7152, 0.0722));
+        vec3 c = hv > 0.5 ? mix(bg, vec3(1.0), 0.22 + 0.25 * (1.0 - lb)) : bg * (0.62 + 0.2 * lb);
+        gl_FragColor = vec4(mix(bg, c, m), 1.0); return;
       }
       if (id == 0) {
         vec2 uv = (cell + 0.5) / uGrid;
@@ -652,7 +639,7 @@
     uTime: { value: 0 }, uWater: { value: TANK.h * 0.95 }, uLight: { value: 1 }, uGrowth: { value: 0.06 }, uGlow: { value: 0 },
     uPointSize: { value: 1 }, uViewPx: { value: new T.Vector2(1, 1) }, uCamDist: { value: 100 },
     uRip: { value: Array.from({ length: 8 }, () => new T.Vector4(0, 0, -99, 0)) },
-    uFlash: { value: 0 }, uMGlow: { value: 0 }, uBaseHover: { value: 0 },
+    uFlash: { value: 0 }, uMGlow: { value: 0 }, uBaseHover: { value: 0 }, uStatic: { value: 0 },
     uFlow: { value: new T.Vector3(1, 0.2, 0.12) }, uLightDir: { value: new T.Vector3(-0.3, 1, 0.35) },
     uShape: { value: new T.Vector4(45, 20, 4, 0) }, uShapePh: { value: new T.Vector3() },
   };
@@ -684,7 +671,6 @@
   const asciiU = {
     uScene: { value: null }, uAtlas: { value: null }, uPal: { value: null }, uOverlay: { value: null },
     uLbl: { value: null }, uLblRect: { value: new T.Vector4(0, 0, 0, 0) }, uLblF: { value: 3 },
-    uStatic: { value: 0 }, uStaticRect: { value: new T.Vector4(0, 0, 0, 0) },
     uCellPx: { value: new T.Vector2() }, uOffset: { value: new T.Vector2() }, uGrid: { value: new T.Vector2() }, uRes: { value: new T.Vector2() },
     uLook: { value: 0 }, uTime: U.uTime, uStars: { value: 0 }, uAurora: { value: 0 }, uOverlayOn: { value: 1 }, uOverlayDim: { value: 1 }, uOverlayGlow: { value: 0 }, uGlowCol: { value: vec3('#ffffff') },
     uRip: U.uRip, uShape: U.uShape, uShapePh: U.uShapePh,
@@ -1250,6 +1236,7 @@
       wl.frustumCulled = false; world.add(wl);
     }
     world.add(dynPoints); world.add(fishGroup); world.add(itemGroup);
+    world.add(makeHaze());
     placeFound(foundType, mulberry32(foundSeed));
     bubbles.length = 0;
     // tank bounds for edge taps
@@ -2024,7 +2011,7 @@
   let lastTimerText = '';
   function timerStrings() {
     const tm = state.timer, rem = remaining();
-    if (tm.mode === 'idle') return { label: '', big: 'focus', dim: 1 };
+    if (tm.mode === 'idle') return { label: 'start focus', icon: true, big: 'Dither', dim: 1, title: true };
     if (tm.mode === 'focus-done') return { label: 'rest up', icon: true, big: '0:00', dim: 1, waiting: true };
     if (tm.mode === 'rest-done') return { label: 'focus', icon: true, big: '0:00', dim: 1, waiting: true };
     const isRest = tm.mode.startsWith('rest');
@@ -2075,8 +2062,12 @@
       const xs = widths.map((wd) => { const c = x + wd / 2; x += wd; return c; });
       ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], h * 0.6)));
     } else {
-      ctx.font = `700 ${h * 0.56}px ${FONT_UI}`;
-      ink((draw) => draw(big, 0, h * 0.62));
+      // a word in the digits' place (the name on the start screen): as big as fits the band
+      let size = h * 0.74;
+      ctx.font = `800 ${size}px ${FONT_UI}`;
+      const maxW = (w / sx) * 0.96, mw = ctx.measureText(big).width;
+      if (mw > maxW) { size *= maxW / mw; ctx.font = `800 ${size}px ${FONT_UI}`; }
+      ink((draw) => draw(big, 0, h * 0.64));
     }
     if (label) {
       ctx.font = `800 ${h * 0.24}px ${FONT_UI}`;
@@ -2264,13 +2255,36 @@
     exitGrowthPreview();
     withStatic(() => { generate(state.seed); save(); updateDrawer(); showUndo(prev); });
   }
+  // the haze shell: the tank's own outline, a hair outside the glass, from under the base to above the rim
+  const HAZE_VERT = /* glsl */`void main() { gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); }`;
+  const HAZE_FRAG = /* glsl */`
+    uniform float uStatic, uTime;
+    float hh(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main() {
+      vec2 c = floor(gl_FragCoord.xy); float fr = floor(uTime * 24.0);
+      float band = 0.55 + 0.45 * sin(c.y * 0.7 + uTime * 38.0) * sin(c.y * 0.13 - uTime * 9.0);   // rolling bands, like a dial between stations
+      if (hh(c + fr * 17.31) > uStatic * 0.92 * band) discard;
+      gl_FragColor = vec4(hh(c * 1.7 + fr), ${M.haze}.0 / 63.0, 0.0, 0.0);
+    }
+  `;
+  const hazeMat = new T.ShaderMaterial({ uniforms: { uStatic: U.uStatic, uTime: U.uTime }, vertexShader: HAZE_VERT, fragmentShader: HAZE_FRAG, side: T.DoubleSide, depthWrite: false });
+  let hazeMesh = null;
+  function makeHaze() {
+    const N = 96, y0 = -2.8, y1 = TANK.h + 0.6, sc = 1.03, pos = [];
+    for (let k = 0; k < N; k++) {
+      const a = boundary((k / N) * Math.PI * 2, sc), b = boundary(((k + 1) % N / N) * Math.PI * 2, sc);
+      pos.push(a.x, y0, a.z, b.x, y0, b.z, a.x, y1, a.z, a.x, y1, a.z, b.x, y0, b.z, b.x, y1, b.z);     // a wall panel
+      pos.push(0, y1, 0, a.x, y1, a.z, b.x, y1, b.z);                                                 // the lid
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    hazeMesh = new T.Mesh(g, hazeMat); hazeMesh.frustumCulled = false; hazeMesh.renderOrder = 10; hazeMesh.visible = false;
+    return hazeMesh;
+  }
   // like a radio between stations: the dots break into static, the new tank swaps in underneath, then it tunes in
   let staticAnim = null;
   function withStatic(swap) {
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce || staticAnim) { swap(); return; }
-    const b = tankScreenBox(), pad = 0.07;
-    asciiU.uStaticRect.value.set(((b.x0 - pad) * 0.5 + 0.5) * grid.cols, ((b.y0 - pad) * 0.5 + 0.5) * grid.rows, ((b.x1 + pad) * 0.5 + 0.5) * grid.cols, ((b.y1 + pad * 1.6) * 0.5 + 0.5) * grid.rows);
     staticAnim = { phase: 'out', t: 0, swap };
   }
   function stepStatic(dt) {
@@ -2278,15 +2292,15 @@
     a.t += Math.min(dt, 0.06);
     const OUT = 0.34, IN = 0.85;
     if (a.phase === 'out') {
-      asciiU.uStatic.value = ease(Math.min(1, a.t / OUT));
+      U.uStatic.value = ease(Math.min(1, a.t / OUT));
       if (a.t >= OUT) { a.phase = 'swap'; setTimeout(() => { a.swap(); a.phase = 'in'; a.t = 0; }, 0); }
     } else if (a.phase === 'hold') {
       /* test hook: keep whatever value was set */
     } else if (a.phase === 'swap') {
-      asciiU.uStatic.value = 1;
+      U.uStatic.value = 1;
     } else {
       const u = Math.min(1, a.t / IN);
-      asciiU.uStatic.value = u >= 1 ? 0 : Math.pow(1 - u, 1.3) * (0.72 + 0.28 * Math.cos(u * 15));      // wavers before it locks on
+      U.uStatic.value = u >= 1 ? 0 : Math.pow(1 - u, 1.3) * (0.72 + 0.28 * Math.cos(u * 15));      // wavers before it locks on
       if (u >= 1) staticAnim = null;
     }
   }
@@ -2546,6 +2560,7 @@
     const glowT = hovering ? 1 : waiting ? 0.25 + 0.25 * Math.sin(t * 1.1) : 0;
     asciiU.uOverlayGlow.value += (glowT - asciiU.uOverlayGlow.value) * (1 - Math.exp(-dt * 5));
     stepStatic(dtReal);
+    if (hazeMesh) hazeMesh.visible = U.uStatic.value > 0.002;
     U.uGlow.value += (glowTarget - U.uGlow.value) * (1 - Math.exp(-dt * 1.8));
     if (glowMesh) glowMesh.visible = U.uGlow.value > 0.01;
     U.uBaseHover.value += ((baseHover ? 1 : 0) - U.uBaseHover.value) * (1 - Math.exp(-dt * 8));
@@ -2595,8 +2610,8 @@
     foundScreen() { if (!found) return null; const p = found.root.position.clone().add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
     setZoom(z) { state.zoom = state.zoomTarget = z; },
     slow(f) { timeScale = f; },
-    staticNow() { return +asciiU.uStatic.value.toFixed(2); },
-    freezeStatic(v) { const b = tankScreenBox(), pad = 0.07; asciiU.uStaticRect.value.set(((b.x0 - pad) * 0.5 + 0.5) * grid.cols, ((b.y0 - pad) * 0.5 + 0.5) * grid.rows, ((b.x1 + pad) * 0.5 + 0.5) * grid.cols, ((b.y1 + pad * 1.6) * 0.5 + 0.5) * grid.rows); staticAnim = { phase: 'hold', t: 0, swap() {} }; asciiU.uStatic.value = v; },
+    staticNow() { return +U.uStatic.value.toFixed(2); },
+    freezeStatic(v) { staticAnim = { phase: 'hold', t: 0, swap() {} }; U.uStatic.value = v; },
     baseBox() { let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (let k = 0; k < 24; k++) { const p = boundary((k / 24) * Math.PI * 2, 1.07).setY(-2.6).project(camera); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); } return { x0, x1, y0, tank: tankScreenBox().y0, rows: grid.rows * grid.chCss }; },
     baseState() { return { lit: baseLit(), glow: +U.uGlow.value.toFixed(2), target: +glowTarget.toFixed(2), night: skyInfo.night, override: state.baseOverride }; },
     info() { return { fish: fishObjs.map((o) => [o.mode, +(o.mt || 0).toFixed(2), +o.p.x.toFixed(1), +o.p.y.toFixed(1), +o.p.z.toFixed(1), +o.mesh.scale.x.toFixed(2)]), pending: state.pendingFish, total: state.fish.length, found: found && found.type, anim: !!(found && found.anim), animT: found && found.anim ? +found.anim.t.toFixed(2) : -1, zoom: +state.zoom.toFixed(2), timer: state.timer.mode, splashes: splashes.length, sparkles: sparkles.length }; },
