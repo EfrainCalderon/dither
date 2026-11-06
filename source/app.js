@@ -570,6 +570,10 @@
         float m = 1.0 - smoothstep(r - 0.8, r + 0.8, length(q));
         float lb = dot(bg, vec3(0.2126, 0.7152, 0.0722));
         vec3 c = hv > 0.5 ? mix(bg, vec3(1.0), 0.22 + 0.25 * (1.0 - lb)) : bg * (0.62 + 0.2 * lb);
+        // at night, sky-tinted fuzz reads as gray: use the water's cool blue-green instead, like the top of the tank
+        float night = 1.0 - smoothstep(0.08, 0.3, lb);
+        vec3 water = hv > 0.75 ? vec3(0.50, 0.80, 0.80) : hv > 0.5 ? vec3(0.27, 0.58, 0.62) : vec3(0.11, 0.32, 0.38);
+        c = mix(c, water, night);
         gl_FragColor = vec4(mix(bg, c, m), 1.0); return;
       }
       if (id == 0) {
@@ -2530,6 +2534,7 @@
   let typed = '';
   const setAdmin = (on) => { document.body.classList.toggle('admin', on); if (!on) { $('drawer').classList.remove('on'); $('tune').classList.remove('on'); } try { localStorage.setItem('dither.admin', on ? '1' : '0'); } catch (e) { /* fine */ } };
   try { setAdmin(localStorage.getItem('dither.admin') === '1'); } catch (e) { /* fine */ }
+  $('adminX').onclick = () => { setAdmin(false); $('live').textContent = 'Admin controls off.'; };
   window.addEventListener('keydown', (ev) => {
     if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT' || ev.metaKey || ev.ctrlKey || ev.altKey || ev.key.length !== 1) return;
     typed = (typed + ev.key.toLowerCase()).slice(-7);

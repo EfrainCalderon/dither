@@ -79,7 +79,7 @@
   .about.on { opacity: 1; pointer-events: auto; }
   .glass { --ink: var(--card-ink, #143650); --line: color-mix(in srgb, var(--ink) 30%, transparent);
            position: relative; width: min(500px, calc(100vw - 32px)); padding: 46px 40px 38px; border-radius: 34px; display: grid; gap: 18px; justify-items: center; text-align: center;
-           background: var(--card-bg, #8fbde6); transform: translateY(10px) scale(0.98); transition: transform 350ms ease, background-color 3s ease; }
+           background: color-mix(in srgb, var(--card-bg, #8fbde6) 80%, transparent); transform: translateY(10px) scale(0.98); transition: transform 350ms ease, background-color 3s ease; }
   .about.on .glass { transform: none; }
   .glass .edge { position: absolute; left: -48px; top: -48px; width: calc(100% + 96px); height: calc(100% + 96px); pointer-events: none; z-index: -1; opacity: 0; transition: opacity 600ms ease 120ms; }
   .about.on .glass .edge { opacity: 1; }
@@ -117,6 +117,9 @@
   .tune { position: fixed; z-index: 4; right: 16px; bottom: 16px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip);
           backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-size: 12px; transition: opacity 700ms; }
   body:not(.admin) .tune, body:not(.admin) .drawer { display: none !important; }
+  .tune:not(.tune-x) { right: 54px; }
+  .tune-x { width: 30px; padding: 0; font-size: 16px; line-height: 1; }
+  .tune-x:hover { background: rgba(255, 255, 255, 0.18); }
   .tune.on { background: rgba(159, 227, 216, 0.22); }
   .drawer { --ink: #eef5f3; --ink-dim: rgba(238,245,243,.68); --line: rgba(238,245,243,.22); color: var(--ink);
             position: fixed; z-index: 5; right: 16px; bottom: 56px; width: 310px; padding: 14px; border-radius: 16px; display: none; gap: 13px;
@@ -166,8 +169,9 @@
 </div>
 
 <button class="tune" id="tune" aria-expanded="false" aria-controls="drawer">admin</button>
+<button class="tune tune-x" id="adminX" aria-label="Exit admin mode" title="Exit admin mode">×</button>
 <div class="drawer" id="drawer" role="region" aria-label="Admin controls">
-  <h2>Admin · type “Pynchon” again to hide</h2>
+  <h2>Admin · × or type “Pynchon” to leave</h2>
   <div class="field">
     <div class="top"><label for="growth">Tank time</label><b id="growthVal">0 poms</b></div>
     <div class="row"><input id="growth" type="range" min="0" max="10" step="0.05" value="0"><button id="growthNow" class="on">now</button></div>
@@ -4453,6 +4457,10 @@ void main() {
         float m = 1.0 - smoothstep(r - 0.8, r + 0.8, length(q));
         float lb = dot(bg, vec3(0.2126, 0.7152, 0.0722));
         vec3 c = hv > 0.5 ? mix(bg, vec3(1.0), 0.22 + 0.25 * (1.0 - lb)) : bg * (0.62 + 0.2 * lb);
+        // at night, sky-tinted fuzz reads as gray: use the water's cool blue-green instead, like the top of the tank
+        float night = 1.0 - smoothstep(0.08, 0.3, lb);
+        vec3 water = hv > 0.75 ? vec3(0.50, 0.80, 0.80) : hv > 0.5 ? vec3(0.27, 0.58, 0.62) : vec3(0.11, 0.32, 0.38);
+        c = mix(c, water, night);
         gl_FragColor = vec4(mix(bg, c, m), 1.0); return;
       }
       if (id == 0) {
@@ -6413,6 +6421,7 @@ void main() {
   let typed = '';
   const setAdmin = (on) => { document.body.classList.toggle('admin', on); if (!on) { $('drawer').classList.remove('on'); $('tune').classList.remove('on'); } try { localStorage.setItem('dither.admin', on ? '1' : '0'); } catch (e) { /* fine */ } };
   try { setAdmin(localStorage.getItem('dither.admin') === '1'); } catch (e) { /* fine */ }
+  $('adminX').onclick = () => { setAdmin(false); $('live').textContent = 'Admin controls off.'; };
   window.addEventListener('keydown', (ev) => {
     if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT' || ev.metaKey || ev.ctrlKey || ev.altKey || ev.key.length !== 1) return;
     typed = (typed + ev.key.toLowerCase()).slice(-7);
