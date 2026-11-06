@@ -1,5 +1,5 @@
 /*
-  Dither 1.3.3
+  Dither 1.3.4
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -3273,6 +3273,7 @@
       if (b.leave >= 1) { propGroup.remove(b.mesh); brain = null; brainUniforms.uTrans.value.set(0, 0, 0); state.brain = false; save(); syncBrainUI(); return; }
     } else brainUniforms.uTrans.value.copy(U.uTrans.value);     // otherwise it dithers along with "new tank"
     if (b.phase === 'fall') {
+      dt *= FCFG.pace;                                    // falls in slow motion, like a new koi's world
       b.vel.y -= b.g * dt; b.pos.addScaledVector(b.vel, dt); b.rot.addScaledVector(b.spin, dt);
       if (Math.random() < 0.6) sparkle(b.pos.x, b.pos.y + 0.62 * BRAIN_SCALE + 0.5, b.pos.z, 2, 5);
       if (b.pos.y - 0.62 * BRAIN_SCALE <= water) {
@@ -3318,9 +3319,12 @@
     if (brain) return;
     endFollow(false);
     hideUndo();
+    // the brain takes the new koi's place: drop the koi this session earned before the reset would reveal it
+    if (state.pendingFish > 0) { state.fish.splice(state.fish.length - state.pendingFish, state.pendingFish); state.pendingFish = 0; syncFish(); }
     if (state.timer.mode !== 'idle') withTimerDither(() => { timerReset(); });
     dayPeek = false;
     makeBrain(true); state.brain = true; save(); syncBrainUI(); updateTimerActions(); renderTimerText(true); announce();
+    startFollow(brain, true);                             // ride it down from the sky, then stay with it
     $('live').textContent = 'Called it a day. Enjoy the rest of it.';
   }
 
@@ -3674,11 +3678,21 @@
     drag = null;
   };
   const zoomMin = () => CLOSE_DIST / baseDistance();      // as close as the follow camera's close-up
+  // the brain is far bigger than a koi, so its close-up is framed by its size: about half the screen wide (more on a phone)
+  function brainZoom() {
+    if (!brainGeo) return zoomMin();
+    if (!brainGeo.boundingBox) brainGeo.computeBoundingBox();
+    const sz = brainGeo.boundingBox.getSize(V(0, 0, 0)).multiplyScalar(BRAIN_SCALE);
+    const w = Math.max(sz.x, sz.z), h = sz.y, t2 = 2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2));
+    const fill = camera.aspect < 0.8 ? 0.8 : 0.5;
+    const d = Math.max(w / (fill * t2 * camera.aspect), h / (0.55 * t2));
+    return clamp(d / baseDistance(), zoomMin(), 1);
+  }
   function startFollow(o, cine) {
     if (!o) return;
     if (!follow) follow = { back: state.zoomTarget };       // where to go back to afterwards
-    follow.o = o; follow.cine = !!cine;
-    state.zoomTarget = zoomMin(); zoomRate = cine ? 1.4 : 2.2;
+    follow.o = o; follow.cine = !!cine; follow.brain = o === brain;
+    state.zoomTarget = follow.brain ? brainZoom() : zoomMin(); zoomRate = cine ? 1.4 : 2.2;
   }
   function endFollow(slow) {
     if (!follow) return;
@@ -3701,7 +3715,7 @@
     touchPts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     if (pinch && touchPts.size >= 2) {
       zoomRate = 2.2; state.zoomTarget = clamp(pinch.z0 * pinch.d0 / spread(), zoomMin(), 1.3);     // fingers apart = closer
-      if (follow && state.zoomTarget > zoomMin() * 2.2) { const z = state.zoomTarget; endFollow(false); state.zoomTarget = z; }
+      if (follow && state.zoomTarget > (follow.brain ? brainZoom() * 1.6 : zoomMin() * 2.2)) { const z = state.zoomTarget; endFollow(false); state.zoomTarget = z; }
     }
   });
   const endTouch = (ev) => { touchPts.delete(ev.pointerId); if (touchPts.size < 2 && pinch) { pinch = null; setTimeout(() => { suppressClick = false; }, 250); } };
@@ -3744,7 +3758,7 @@
     if (!(ev.target === canvas || ev.target.id === 'timerHit')) return;
     zoomRate = 2.2;
     state.zoomTarget = clamp(state.zoomTarget * Math.exp(ev.deltaY * 0.0012), zoomMin(), 1.3);
-    if (follow && state.zoomTarget > zoomMin() * 2.2) { const z = state.zoomTarget; endFollow(false); state.zoomTarget = z; }     // zooming well out lets go of the fish
+    if (follow && state.zoomTarget > (follow.brain ? brainZoom() * 1.6 : zoomMin() * 2.2)) { const z = state.zoomTarget; endFollow(false); state.zoomTarget = z; }     // zooming well out lets go of the fish
   }, { passive: true });
   window.addEventListener('keydown', (ev) => {
     if ((ev.target.tagName === 'INPUT' && ev.target.type === 'range') || ev.target.isContentEditable) return;
@@ -3855,11 +3869,13 @@
     }
     simulate(dt, t);
     // follow camera: it stays on the fish (a new koi's entrance included) until you tap away, press Esc or zoom out
-    if (follow && !fishObjs.includes(follow.o)) endFollow(false);
+    if (follow && (follow.brain ? (follow.o !== brain || brain.phase === 'leaving') : !fishObjs.includes(follow.o))) endFollow(false);
     {
       const dist = baseDistance() * state.zoom, k = clamp((dist - CLOSE_DIST * 1.15) / (CLOSE_DIST * 2), 0, 1);
-      camEl += ((4 + 9 * k * k * (3 - 2 * k)) - camEl) * 0.12;          // close in, the camera comes down level with the fish
-      if (follow) {
+      const elWant = 4 + 9 * k * k * (3 - 2 * k);
+      camEl += ((follow && follow.brain ? Math.max(12, elWant) : elWant) - camEl) * 0.12;   // close in, the camera comes down level with the fish (but looks down a little on the brain)
+      if (follow && follow.brain) target.lerp(follow.o.pos, follow.cine ? 0.3 : 0.2);
+      else if (follow) {
         const o = follow.o;
         if (!(follow.cine && o.mode === 'intro' && !o.intro)) {         // a new koi: wait until it's placed in the sky
           const want = o.p.clone();
