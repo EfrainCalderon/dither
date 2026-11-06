@@ -1,8 +1,8 @@
 /*
-  Dither 1.2.3
+  Dither 1.3
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
-  - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
+  - Each finished 25-minute focus session adds one koi (they reset at midnight)
     and moves the tank one "pom" further along: moss creeps, carpet fills in, stems
     reach out of the water, water slowly evaporates. "rescape" plants a fresh tank.
   - The sky behind follows the real sun and moon for your area.
@@ -110,14 +110,17 @@
   const DENSITY = 0.72;     // smallest dots
   const FPS = 24;
 
-  // goldfish + koi varieties, roughly in proportion to how common they are
+  // goldfish + koi varieties, roughly in proportion to how common they are. gold: a goldfish (left out when koi only)
   const FISH = [
-    { name: 'comet',     w: 3,   base: M.fishOrange, body: [1.55, 0.7, 0.5], tail: 1.3, size: [0.8, 1.15], speed: 3.4 },
-    { name: 'sarasa',    w: 2,   base: M.fishWhite, spot: M.fishRed, freq: 0.9, thr: 0.5, body: [1.55, 0.7, 0.5], tail: 1.3, size: [0.85, 1.15], speed: 3.3 },
-    { name: 'shubunkin', w: 1.5, base: M.fishBlue, spot: M.fishOrange, spot2: M.fishBlack, freq: 2.6, thr: 0.6, body: [1.5, 0.72, 0.5], tail: 1.4, size: [0.8, 1.1], speed: 3.2 },
+    { name: 'comet',     w: 3,   gold: 1, base: M.fishOrange, body: [1.55, 0.7, 0.5], tail: 1.3, size: [0.8, 1.15], speed: 3.4 },
+    { name: 'sarasa',    w: 2,   gold: 1, base: M.fishWhite, spot: M.fishRed, freq: 0.9, thr: 0.5, body: [1.55, 0.7, 0.5], tail: 1.3, size: [0.85, 1.15], speed: 3.3 },
+    { name: 'shubunkin', w: 1.5, gold: 1, base: M.fishBlue, spot: M.fishOrange, spot2: M.fishBlack, freq: 2.6, thr: 0.6, body: [1.5, 0.72, 0.5], tail: 1.4, size: [0.8, 1.1], speed: 3.2 },
     { name: 'kohaku',    w: 2,   base: M.fishWhite, spot: M.fishRed, freq: 0.75, thr: 0.52, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.65], speed: 2.4, fin: M.fishWhite },
-    { name: 'ogon',      w: 1,   base: M.fishGold, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.6], speed: 2.4 },
+    { name: 'sanke',     w: 1.4, base: M.fishWhite, spot: M.fishRed, spot2: M.fishBlack, freq: 0.75, thr: 0.52, freq2: 1.8, thr2: 0.68, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.65], speed: 2.4, fin: M.fishWhite },
     { name: 'showa',     w: 1,   base: M.fishBlack, spot: M.fishRed, spot2: M.fishWhite, freq: 0.85, thr: 0.55, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.6], speed: 2.3 },
+    { name: 'tancho',    w: 0.8, base: M.fishWhite, cap: M.fishRed, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.6], speed: 2.3, fin: M.fishWhite },
+    { name: 'ogon',      w: 1,   base: M.fishGold, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.6], speed: 2.4 },
+    { name: 'asagi',     w: 0.7, base: M.fishBlue, belly: M.fishRed, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.6], speed: 2.3 },
     { name: 'chagoi',    w: 0.6, base: M.fishBronze, body: [2.05, 0.75, 0.62], tail: 0.9, size: [1.3, 1.75], speed: 2.1 },
     { name: 'platinum',  w: 0.6, base: M.fishWhite, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.6], speed: 2.3 },
   ];
@@ -372,7 +375,7 @@
           float d = shapeNorm(vW.xz - uShadeOff * t);
           sh = max(sh, (1.0 - smoothstep(0.96, 1.12 + 0.35 * t, d)) * (1.0 - 0.55 * t));
         }
-        sh *= uShade * (1.0 - 0.9 * uGlow) * (1.0 - clamp(uTrans.y * 1.5, 0.0, 1.0));   // the shadow just fades during a swap
+        sh *= uShade * (1.0 - clamp(uTrans.y * 1.5, 0.0, 1.0));   // the shadow just fades during a swap; the base light's effect is dithered in the halftone pass
         if (sh < 0.04) discard;
         gl_FragColor = vec4(sh, ${M.shade}.0 / 63.0, 0.0, 0.0);
         return;
@@ -411,6 +414,7 @@
         if (abs(N.y) < 0.5) { lum = 0.38 + 0.2 * diff; addGlow = uGlow * 0.62 * smoothstep(-0.3, -2.4, vW.y); }
       } else if (m >= ${M.fishOrange} && m <= ${M.fishBronze}) {
         lum = 0.4 + 0.6 * diff;
+        if (vLum < 0.0) lum *= -vLum;          // fins: smaller dots, so they read as see-through
       }
       bool under = vW.y < uWater && lit;
       float depthN = clamp((uWater - vW.y) / max(uWater, 1.0), 0.0, 1.0);
@@ -553,7 +557,9 @@
     uniform vec4 uLblRect; uniform float uLblF;
     uniform vec2 uCellPx, uOffset, uGrid, uRes;
     uniform float uLook, uTime, uStars, uAurora, uOverlayOn, uOverlayDim, uOverlayGlow;
-    uniform vec3 uGlowCol;
+    uniform vec3 uGlowCol, uOutlineCol;
+    uniform float uShadeLit, uShadeAmt;
+    uniform vec4 uOvRect;
     uniform vec3 uTint, uDeep, uSky0, uSky1, uSky2, uSkyTint, uSunCol, uMoonCol, uOverlayCol;
     uniform vec2 uSunPos, uMoonPos;
     ${COMMON}
@@ -602,6 +608,15 @@
             float m = 1.0 - smoothstep(r - 0.6, r + 0.6, length(sq));
             gl_FragColor = vec4(mix(bg, uOverlayCol, m), 1.0); return;
           }
+          // a contrasting outline around the letters, so they read over the tank up close
+          if (lf <= 0.3 && !(uTimerDither > 0.001 && bay8(cell * uLblF + sub) < uTimerDither)) {
+            float nb = 0.0;
+            for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) { vec4 n = texelFetch(uLbl, ivec2(lc * uLblF + sub) + ivec2(dx, dy), 0); nb = max(nb, n.r * n.a); }
+            if (nb > 0.3) {
+              float r = sr * 0.95, m = 1.0 - smoothstep(r - 0.6, r + 0.6, length(sq));
+              gl_FragColor = vec4(mix(bg, uOutlineCol, m * (uOverlayDim < 0.99 ? 0.55 : 0.9)), 1.0); return;
+            }
+          }
           if (lf <= 0.3 && lg > 0.03 && uOverlayGlow > 0.01) {
             float gg = clamp(lg * uOverlayGlow * 1.6, 0.0, 1.0);
             float r = sr * pow(gg, 0.7) * 0.95;
@@ -616,6 +631,15 @@
           float m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
           gl_FragColor = vec4(mix(bg, uOverlayCol, m), 1.0); return;
         }
+        // the digits' outline: a ring of dots in a contrasting color, one cell wide
+        if (fill <= 0.35 && cell.x >= uOvRect.x && cell.y >= uOvRect.y && cell.x <= uOvRect.z && cell.y <= uOvRect.w && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
+          float nb = 0.0;
+          for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) { vec4 n = texelFetch(uOverlay, ivec2(cell) + ivec2(dx, dy), 0); nb = max(nb, n.r * n.a); }
+          if (nb > 0.35) {
+            float r = rMax * 0.98, m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
+            gl_FragColor = vec4(mix(bg, uOutlineCol, m * (uOverlayDim < 0.99 ? 0.55 : 0.9)), 1.0); return;
+          }
+        }
         if (fill <= 0.35 && glow > 0.03 && uOverlayGlow > 0.01) {
           float gg = clamp(glow * uOverlayGlow * 1.6, 0.0, 1.0);
           float r = rMax * pow(gg, 0.7) * 0.9;
@@ -625,7 +649,8 @@
       }
       // ground shadow: darker dots over the sky, bigger where the shadow is deeper
       if (id == ${M.shade}) {
-        float sv = s.r;
+        // the base light washes the shadow out; turning it on or off dithers cell by cell instead of fading all at once
+        float sv = s.r * (1.0 - 0.9 * uShadeAmt * (bay8(cell) < uShadeLit ? 1.0 : 0.0));
         float r = rMax * (0.3 + 0.7 * sqrt(sv));
         float m = 1.0 - smoothstep(r - 0.8, r + 0.8, length(q));
         float lb = dot(bg, vec3(0.2126, 0.7152, 0.0722));
@@ -726,6 +751,10 @@
   const scene = new T.Scene();
   const camera = new T.PerspectiveCamera(26, 1, 1, 900);
   const target = new T.Vector3(0, 19, 0);   // sits the tank a little low, leaving sky for the timer
+  const HOME_TARGET = target.clone();
+  // ---- follow camera: click a fish, or watch a new koi drop in, and the camera moves in close and follows it
+  const CLOSE_DIST = 38;                 // how near the close-up sits (scene units); also the closest you can zoom
+  let follow = null, camEl = 13, zoomRate = 2.2, homeRate = 0.15;
   let rt = null;
 
   // ---- the timer: one canvas, used either as a texture in the water or as an overlay grid
@@ -746,7 +775,7 @@
     uScene: { value: null }, uAtlas: { value: null }, uPal: { value: null }, uOverlay: { value: null },
     uLbl: { value: null }, uLblRect: { value: new T.Vector4(0, 0, 0, 0) }, uLblF: { value: 3 }, uTimerDither: { value: 0 },
     uCellPx: { value: new T.Vector2() }, uOffset: { value: new T.Vector2() }, uGrid: { value: new T.Vector2() }, uRes: { value: new T.Vector2() },
-    uLook: { value: 0 }, uTime: U.uTime, uStars: { value: 0 }, uAurora: { value: 0 }, uOverlayOn: { value: 1 }, uOverlayDim: { value: 1 }, uOverlayGlow: { value: 0 }, uGlowCol: { value: vec3('#ffffff') },
+    uLook: { value: 0 }, uTime: U.uTime, uStars: { value: 0 }, uAurora: { value: 0 }, uOverlayOn: { value: 1 }, uOverlayDim: { value: 1 }, uOverlayGlow: { value: 0 }, uGlowCol: { value: vec3('#ffffff') }, uOutlineCol: { value: vec3('#eef7f8') }, uShadeLit: { value: 0 }, uShadeAmt: { value: 0 }, uOvRect: { value: new T.Vector4(0, 0, -1, -1) },
     uRip: U.uRip, uShape: U.uShape, uShapePh: U.uShapePh,
     uTint: { value: vec3('#1f6f78') }, uDeep: { value: vec3('#185160') },
     uSky0: { value: vec3('#1b4c84') }, uSky1: { value: vec3('#3b7cb2') }, uSky2: { value: vec3('#8fbfe2') }, uSkyTint: { value: new T.Vector3(1, 1, 1) },
@@ -837,6 +866,7 @@
       var tl = { digit, lab, digitBase, labBase, actTop: labBase + 0.25 * lab + GAP };
       const F = clamp(Math.round(cwDev / 3), 2, 4);
       band = { bandH, bandW, bandX, bandTop, lTop, lH, F, ...tl };
+      asciiU.uOvRect.value.set(bandX - 1, rows - (bandTop + bandH) - 1, bandX + bandW + 1, rows);      // where the timer's outline can be (cells, from the bottom)
       lblCanvas.width = bandW * F; lblCanvas.height = lH * F;
       if (lblTex) lblTex.dispose();
       lblTex = new T.CanvasTexture(lblCanvas);
@@ -856,7 +886,7 @@
   }
   function placeCamera() {
     const dist = baseDistance() * state.zoom;
-    const el = T.MathUtils.degToRad(13), az = T.MathUtils.degToRad(state.az);
+    const el = T.MathUtils.degToRad(camEl), az = T.MathUtils.degToRad(state.az);
     camera.position.set(target.x + Math.sin(az) * Math.cos(el) * dist, target.y + Math.sin(el) * dist, target.z + Math.cos(az) * Math.cos(el) * dist);
     camera.lookAt(target);
     U.uCamDist.value = dist;
@@ -1654,10 +1684,10 @@
     }
   }
 
-  // ================================================================ goldfish + koi (one per finished pom, reset at midnight)
+  // ================================================================ goldfish + koi (one per finished pom, reset at midnight): the v1.2 fish
   const fishGroup = new T.Group();
   let fishObjs = [];
-  function fishGeometry(f) {
+  function fishGeometryClassic(f) {
     const v = FISH.find((x) => x.name === f.v) || FISH[0];
     const rand = mulberry32(f.s);
     const noise = makeNoise(rand);
@@ -1682,36 +1712,14 @@
     [-1, 1].forEach((sd) => part(b, new T.IcosahedronGeometry(1, 1), M.fishBlack, V(v.body[0] * sz * 0.62, v.body[1] * sz * 0.18, sd * v.body[2] * sz * 0.72), [0, 0, 0], [0.16 * sz, 0.16 * sz, 0.1 * sz]));
     return b.build();
   }
-  function pickVariety() {
-    const total = FISH.reduce((s, f) => s + f.w, 0);
-    let r = Math.random() * total;
-    for (const f of FISH) { r -= f.w; if (r <= 0) return f; }
-    return FISH[0];
-  }
-  function newFish() {
-    const v = pickVariety();
-    return { v: v.name, size: +(v.size[0] + Math.random() * (v.size[1] - v.size[0])).toFixed(2), s: Math.floor(Math.random() * 1e9) };
-  }
-  function makeFishObj(i) {
-    const f = state.fish[i], v = FISH.find((x) => x.name === f.v) || FISH[0];
-    const mesh = new T.Mesh(fishGeometry(f), sceneMat); mesh.frustumCulled = false; mesh.rotation.order = 'YZX'; fishGroup.add(mesh);
-    return { f, v, mesh, p: swimPoint(), vel: V(Math.random() - 0.5, 0, Math.random() - 0.5), t: swimPoint(), wag: Math.random() * 6, surfacing: false, mode: 'swim', mt: 0 };
-  }
-  function syncFish() {
-    const shown = Math.max(0, state.fish.length - (state.pendingFish || 0));
-    while (fishObjs.length > shown) { const o = fishObjs.pop(); fishGroup.remove(o.mesh); o.mesh.geometry.dispose(); }
-    for (let i = fishObjs.length; i < shown; i++) fishObjs.push(makeFishObj(i));
-    updateFishLabel();
-  }
   // the earned fish appears big above the tank, spins, dives in with a splash, then does a happy lap
   function revealFish() {
     if (!(state.pendingFish > 0)) return;
-    const zoomedIn = state.zoom < 0.93;
-    if (zoomedIn) state.zoomTarget = 1;
     state.pendingFish -= 1; save();
     const i = state.fish.length - 1 - state.pendingFish;
     const o = makeFishObj(i);
-    o.mode = 'intro'; o.mt = zoomedIn ? -1.0 : -0.2;
+    o.mode = 'intro'; o.mt = -0.2;
+    startFollow(o, true);           // the camera meets it in the sky and rides the dive down
     o.mesh.visible = false;
     fishObjs.push(o);
     updateFishLabel();
@@ -1721,7 +1729,7 @@
   function viewAxes() { const az = T.MathUtils.degToRad(state.az); return { front: V(Math.sin(az), 0, Math.cos(az)), right: V(Math.cos(az), 0, -Math.sin(az)) }; }
   // the newcomer drops in from above the top of the screen, at its normal size, spinning slowly on the way down
   const INTRO = { fall: 2.8, under: 1.3 };
-  function introStep(o, dt, t, water) {
+  function introStepClassic(o, dt, t, water) {
     o.mt += dt;
     const m = o.mesh;
     if (o.mt < 0) return;
@@ -1763,7 +1771,7 @@
     const q = boundary(o.lapA + 1.2, 0.6); o.t = V(q.x, clamp(water * 0.55, 4, water - 3), q.z);
   }
   // click a fish: it rushes up, leaps out with a flip, and splashes back in
-  function pokeFish(o) {
+  function pokeFishClassic(o) {
     if (o.mode !== 'swim' && o.mode !== 'celebrate') return;
     let dir = V(-o.p.x, 0, -o.p.z).normalize();
     if (dir.lengthSq() < 0.1) dir = V(1, 0, 0);
@@ -1803,36 +1811,676 @@
     }
     return V(0, U.uWater.value * 0.5, 0);
   }
-  function updateFish(dt, t) {
+  // v1.2's fish, one step (used when "classic" is on in the fish lab)
+  function updateFishClassic(o, dt, t, water) {
+    if (o.mode === 'intro') { introStepClassic(o, dt, t, water); return; }
+    if (o.mode === 'leap') { leapStep(o, dt, t, water); return; }
+    const celebrating = o.mode === 'celebrate';
+    if (celebrating) {
+      o.mt += dt;
+      if (o.mt > 8) o.mode = 'swim';
+      else if (o.p.distanceTo(o.t) < 3.5) { o.lap += 1; const q = boundary(o.lapA + 1.2 + o.lap * 1.1, 0.6); o.t = V(q.x, clamp(water * (0.4 + 0.3 * (o.lap % 2)), 4, water - 2.5), q.z); }
+    } else if (o.p.distanceTo(o.t) < 3 || Math.random() < dt * 0.04) {
+      o.t = swimPoint();
+      o.surfacing = Math.random() < 0.12;
+      if (o.surfacing) o.t.y = water - 0.7;
+    }
+    const sp = o.v.speed * (celebrating ? 2.4 : 0.75 + 0.25 * Math.sin(t * 0.3 + o.wag));
+    const want = o.t.clone().sub(o.p).normalize().multiplyScalar(sp);
+    want.y *= 0.5;
+    o.vel.lerp(want, 1 - Math.exp(-dt * (celebrating ? 1.6 : 0.7)));
+    o.p.addScaledVector(o.vel, dt);
+    if (!inside(o.p.x, o.p.z, 3)) { pullInside(o.p, 0.9); if (!celebrating) o.t = swimPoint(); }
+    const floor = terrain.height(o.p.x, o.p.z) + 1.4;
+    if (o.p.y < floor) o.p.y += (floor - o.p.y) * Math.min(1, dt * 4);
+    if (o.p.y > water - 0.6) o.p.y = water - 0.6;
+    if (o.surfacing && o.p.y > water - 1.0) { addRipple(o.p.x, o.p.z, 0.35, t); o.surfacing = false; o.t = swimPoint(); }
+    o.mesh.position.copy(o.p);
+    const yaw = -Math.atan2(o.vel.z, o.vel.x);
+    const wagRate = o.v.speed * (celebrating ? 4.5 : 2.2);
+    o.mesh.rotation.set(celebrating ? Math.sin(o.mt * 3) * 0.25 : 0, yaw + Math.sin(t * wagRate + o.wag) * (celebrating ? 0.22 : 0.14), Math.atan2(o.vel.y, Math.hypot(o.vel.x, o.vel.z)) * 0.5);
+  }
+
+  // ================================================================ koi: bending bodies, trailing fins, eyes, play
+  // FCFG holds the fish tuning. The fish lab changes it live; "classic" brings back the v1.2 fish exactly.
+  const FCFG_DEFAULT = {
+    classic: false, koiOnly: true,
+    bend: true, softFins: true, eyes: true, glint: true, blink: true, gills: true, mouth: true, leap2: true, dive2: true, play: true,
+    pace: 0.5,          // fish move at this fraction of real time (the drop-in fall keeps its own 2.8 s)
+    breathHz: 0.8,      // gill and mouth breaths a second
+    puffy: 0.2,         // share of new koi with puffy cheeks
+    beatAmp: 0.3,       // tail swing (radians at the tail) while kicking
+    beatHz: 0.9,        // tail beats a second while cruising
+    beatSpeedHz: 0.22,  // extra beats a second for each unit of speed
+    wave: 0.85,         // body waves from nose to tail
+    finLag: 1.6,        // how far behind the body the fins follow: higher = softer, wispier
+    finLen: 1,          // fin length
+    longFins: 0.35,     // share of new koi with long butterfly fins
+    turn: 1.4,          // fastest turn, radians a second
+    glide: 0.45,        // 0 = steady swimmer, 1 = kick then glide
+    speed: 1,           // swim speed
+    bank: 0.6,          // lean into turns
+    pecFlap: 1,         // pectoral fin fanning
+    eyeSize: 1,
+    playEvery: 55,      // seconds between playful moments, on average
+  };
+  const FCFG = Object.assign({}, FCFG_DEFAULT);
+  const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const fwdOf = (yaw, pitch = 0) => V(Math.cos(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.sin(yaw) * Math.cos(pitch));
+  const yawTo = (d) => -Math.atan2(d.z, d.x);
+
+  // ---- the koi body, built head (+x) to tail (-x). Every vertex remembers how far it is from the nose (s),
+  // how soft it is (w: 0 = body, 1 = fin tip), and which fin it belongs to, so it can be bent along a spine each frame.
+  const KIND = { body: 0, pec: 1, pelvic: 2, dorsal: 3, caudal: 4, anal: 5, gill: 6 };
+  function koiGeometry(f, v) {
+    const rand = mulberry32(f.s), noise = makeNoise(rand);
+    const n3 = (p) => (noise(p.x + p.z * 0.7 + 3, p.y + 1) + noise(p.y + 11, p.z + p.x * 0.3 + 5)) / 2;
+    const sz = f.size, long = !!f.lf, FL = FCFG.finLen;
+    const Lb = 2 * v.body[0] * sz, R = v.body[1] * sz, ry = R * 0.92, rz = R * 0.74;
+    const prof = (u) => (u < 0.3 ? Math.sqrt(Math.max(0, 1 - Math.pow((0.3 - u) / 0.3, 2))) : 1 - 0.8 * Math.pow((u - 0.3) / 0.7, 1.7));
+    const finMat = v.fin || v.base;
+    const b = new Builder(), meta = { S: [], W: [], K: [], side: [], rx: [], ry: [], rz: [], ox: [], oy: [], oz: [], CK: [] };
+    let ckNow = 0;           // cheek weight for the next vertex tagged (puffy cheeks breathe)
+    const tag = (p, w, kind, side = 0, root = null) => {
+      meta.S.push(Lb / 2 - p.x); meta.W.push(w); meta.K.push(kind); meta.side.push(side); meta.CK.push(ckNow);
+      if (root) { meta.rx.push(root.x); meta.ry.push(root.y); meta.rz.push(root.z); meta.ox.push(p.x - root.x); meta.oy.push(p.y - root.y); meta.oz.push(p.z - root.z); }
+      else { meta.rx.push(0); meta.ry.push(0); meta.rz.push(0); meta.ox.push(0); meta.oy.push(0); meta.oz.push(0); }
+    };
+    // a surface from a grid: fn(u, v) -> point; normals from the grid itself
+    const surf = (nu, nv, fn, matFn, lumFn, tagFn) => {
+      const pts = [];
+      for (let i = 0; i <= nu; i++) { pts.push([]); for (let j = 0; j <= nv; j++) pts[i].push(fn(i / nu, j / nv)); }
+      const nrm = (i, j) => {
+        const a = pts[Math.min(nu, i + 1)][j].clone().sub(pts[Math.max(0, i - 1)][j]);
+        const c = pts[i][Math.min(nv, j + 1)].clone().sub(pts[i][Math.max(0, j - 1)]);
+        const n = a.cross(c); return n.lengthSq() > 1e-10 ? n.normalize() : V(0, 1, 0);
+      };
+      const put = (i, j) => { const p = pts[i][j]; b.v(p, nrm(i, j), matFn(p, i / nu, j / nv), 0, 0, null, lumFn ? lumFn(i / nu, j / nv) : 0); tagFn(p, i / nu, j / nv); };
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) { put(i, j); put(i + 1, j); put(i + 1, j + 1); put(i, j); put(i + 1, j + 1); put(i, j + 1); }
+    };
+    // body pattern
+    const patch = (p, u) => {
+      const up = p.y / ry;
+      if (v.cap) { const dx = (u - 0.17) * Lb, d = Math.hypot(dx, p.z * 1.2); if (up > 0.15 && d < R * 0.62) return v.cap; return v.base; }
+      if (v.belly) { if (up < -0.1 && u > 0.08) return v.belly; return v.base; }
+      if (!v.spot) return v.base;
+      if (up < -0.45) return v.base === M.fishBlack ? M.fishWhite : v.base;      // koi bellies are plain
+      const q = p.clone().multiplyScalar(v.freq / Math.max(0.7, sz * 0.6));
+      if (n3(q) > v.thr) return v.spot;
+      if (v.spot2) { const q2 = p.clone().multiplyScalar((v.freq2 || v.freq) / Math.max(0.7, sz * 0.6)).addScalar(7.3); if (n3(q2) > (v.thr2 || v.thr + 0.06)) return v.spot2; }
+      return v.base;
+    };
+    // puffy cheeks: the lower sides of the head swell out
+    const cheekW = (u, a) => { const c = Math.cos(a * Math.PI * 2); return Math.exp(-Math.pow((u - 0.19) / 0.075, 2)) * Math.exp(-Math.pow((c + 0.25) / 0.5, 2)); };
+    const puff = f.pc ? 0.42 : 0;
+    surf(28, 16, (u, a) => {
+      const f0 = prof(u), ang = a * Math.PI * 2, c = Math.cos(ang);
+      return V(Lb / 2 - u * Lb, ry * f0 * c * (c < 0 ? 0.86 : 1), rz * f0 * Math.sin(ang) * (1 + puff * cheekW(u, a)));
+    }, (p, u) => patch(p, u), null, (p, u, a) => { ckNow = puff ? cheekW(u, a) : 0; tag(p, 0, KIND.body); ckNow = 0; });
+    // gill covers: a crescent flap behind each eye that lifts open as the fish breathes, over a thin red gill line
+    const g0 = 0.17, g1 = 0.27, gEnd = (k) => g0 + (g1 - g0) * (0.55 + 0.45 * Math.cos(k * 1.7));
+    const onBody = (u, ang, lift) => { const f0 = prof(u), c = Math.cos(ang); return V(Lb / 2 - u * Lb, ry * f0 * c * (c < 0 ? 0.86 : 1) * lift, rz * f0 * Math.sin(ang) * (1 + puff * cheekW(u, ang / (Math.PI * 2))) * lift); };
+    [-1, 1].forEach((side) => {
+      const mid = side > 0 ? Math.PI / 2 : Math.PI * 1.5;
+      surf(6, 8, (u, k) => { const kk = (k - 0.5) * 1.8, ue = gEnd(kk); return onBody(g0 + (ue - g0) * u, mid + kk * side, 1.035); },
+        (p, u, k) => patch(p, g0 + 0.05), (u) => -(0.97 - 0.18 * u * u), (p, u) => tag(p, u, KIND.gill, side));
+      surf(2, 8, (u, k) => { const kk = (k - 0.5) * 1.6, ue = gEnd(kk); return onBody(ue - 0.012 + 0.016 * u, mid + kk * side, 1.012); },
+        () => M.fishRed, () => -0.4, (p) => tag(p, 0, KIND.body));
+    });
+    // fins are thin sheets drawn with smaller dots, so they read as see-through; rays show as faint lines
+    const finLum = (base) => (u, a) => -(base - 0.28 * u) * (0.86 + 0.14 * Math.cos(a * 22));
+    // tail
+    const tl = Lb * (long ? 0.8 : 0.34) * FL, root = Lb * 0.95, fork = long ? 0.12 : 0.34;
+    surf(10, 10, (u, a) => {
+      const yy = a * 2 - 1, half = R * (long ? 0.42 + 1.15 * u : 0.32 + 0.95 * u);
+      let len = tl * (1 - fork * Math.pow(1 - Math.abs(yy), 1.4));
+      if (long) len *= 1 + 0.1 * Math.sin(yy * 9 + f.s % 7);
+      return V(Lb / 2 - (root + u * len), yy * half, 0);
+    }, () => finMat, finLum(long ? 0.78 : 0.82), (p, u) => tag(p, u, KIND.caudal));
+    // dorsal: along the back, swept back; long-finned koi trail it past the tail
+    const d0 = 0.32, d1 = long ? 0.9 : 0.72, dh = R * (long ? 0.95 : 0.6) * FL;
+    surf(10, 5, (u, a) => {
+      const uu = d0 + (d1 - d0) * u, back = ry * prof(uu) * 0.94;
+      const h = dh * Math.pow(1 - u, long ? 0.25 : 0.5) * Math.min(1, u * 6 + 0.15);
+      return V(Lb / 2 - uu * Lb - a * h * (long ? 1.6 : 0.7), back + a * h, 0);
+    }, () => finMat, finLum(0.8), (p, u, a) => tag(p, a * (long ? 1 : 0.55), KIND.dorsal));
+    // anal fin: small, under the tail
+    surf(5, 3, (u, a) => {
+      const uu = 0.74 + 0.12 * u, under = -ry * prof(uu) * 0.84, h = R * 0.36 * FL * (1 - u * 0.6);
+      return V(Lb / 2 - uu * Lb - a * h * 0.6, under - a * h, 0);
+    }, () => finMat, finLum(0.75), (p, u, a) => tag(p, a * 0.5, KIND.anal));
+    // paired fins hang off a root point; they fan, flap and fold back against the body each frame
+    const paired = (kind, uRoot, yk, zk, len, wid, down) => {
+      [-1, 1].forEach((side) => {
+        const f0 = prof(uRoot), rootP = V(Lb / 2 - uRoot * Lb, -ry * f0 * yk, side * rz * f0 * zk);
+        const span = V(-0.45, -down, side * 0.87).normalize(), chord = V(-0.87, 0, -side * 0.45).normalize();
+        surf(7, 4, (u, a) => {
+          const w = wid * Math.sin(Math.PI * (0.18 + 0.82 * Math.min(1, u * 1.15))) * (a - 0.5);
+          return rootP.clone().addScaledVector(span, u * len).addScaledVector(chord, w + u * len * 0.15);
+        }, () => finMat, finLum(0.8), (p, u) => tag(p, u, kind, side, rootP));
+      });
+    };
+    paired(KIND.pec, 0.25, 0.42, 0.8, R * (long ? 2.0 : 0.95) * FL, R * (long ? 0.9 : 0.6), 0.32);
+    paired(KIND.pelvic, 0.5, 0.82, 0.55, R * (long ? 1.25 : 0.6) * FL, R * (long ? 0.55 : 0.36), 0.7);
+    const geo = b.build();
+    ['position', 'normal'].forEach((k) => geo.attributes[k].setUsage(T.DynamicDrawUsage));
+    const rest = { P: geo.attributes.position.array.slice(), N: geo.attributes.normal.array.slice() };
+    const Smax = Math.max(...meta.S) + 0.01;
+    const eyeU = 0.13, ef = prof(eyeU);
+    // the eye sits on the head's real surface (cheeks included), poking about two thirds out
+    const eyeR = R * 0.15, eyeAng = Math.acos(0.22), eyeSurfZ = rz * ef * Math.sin(eyeAng) * (1 + puff * cheekW(eyeU, eyeAng / (Math.PI * 2)));
+    const eye = { s: eyeU * Lb, y: ry * ef * 0.22, z: eyeSurfZ - eyeR * 0.3, r: eyeR };
+    const lidMat = patch(V(Lb / 2 - eyeU * Lb, eye.y, eye.z), eyeU);
+    const mouth = { s: Lb * 0.012, y: -ry * 0.1, r: R * 0.14 };
+    return { geo, rest, meta: Object.fromEntries(Object.entries(meta).map(([k, a]) => [k, Float32Array.from(a)])), Lb, R, ry, Smax, eye, lidMat, mouth, long, puffy: !!f.pc };
+  }
+
+  // ---- eyes: an eyeball, a pupil that looks around, and a glint that stays put (that's what makes an eye look wet)
+  function sphereGeo(mat, r, lum = 0, detail = 1) {
+    const b = new Builder(); b.mesh(new T.IcosahedronGeometry(r, detail), mat);
+    const g = b.build(); if (lum) g.attributes.aLum.array.fill(lum); return g;
+  }
+  function makeEyes(o) {
+    const K = o.kd, er = K.eye.r * FCFG.eyeSize, iris = o.v.base === M.fishGold || o.v.base === M.fishBronze ? M.fishBlack : M.fishGold;
+    o.eyes = [-1, 1].map((side) => {
+      const g = new T.Group();
+      const ball = new T.Mesh(sphereGeo(iris, er, 0, 2), sceneMat);
+      const pupil = new T.Mesh(sphereGeo(M.fishBlack, er * 0.66, 0, 2), sceneMat);
+      const glint = new T.Mesh(sphereGeo(M.fishWhite, er * 0.3, 1, 1), sceneMat);
+      const lid = new T.Mesh(sphereGeo(K.lidMat, er * 1.32, 0, 2), sceneMat);        // body-colored, slides down over the eye
+      [ball, pupil, glint, lid].forEach((m) => { m.frustumCulled = false; g.add(m); });
+      lid.visible = false;
+      o.mesh.add(g);
+      return { side, g, ball, pupil, glint, lid, r: er };
+    });
+    o.mouth = new T.Mesh(sphereGeo(M.fishBlack, K.mouth.r, 0, 2), sceneMat); o.mouth.frustumCulled = false; o.mesh.add(o.mouth);
+  }
+
+  // ---- bending: two spines (body and soft fins), each a chain of angles along the fish.
+  // The body follows the path the head took (it remembers its recent headings), plus a travelling wave for the tail beat.
+  const SPN = 36;
+  function headingAt(o, tq) {
+    const H = o.hist, n = o.histN; if (!n) return [o.yaw, o.pitch];
+    let i = o.histI;
+    for (let k = 0; k < n; k++) {
+      const j = (i - 1 - k + 64) % 64, tj = H[j * 3];
+      if (tj <= tq) {
+        const jn = (j + 1) % 64;
+        if (k === 0) return [H[j * 3 + 1], H[j * 3 + 2]];
+        const tn = H[jn * 3], u = clamp((tq - tj) / Math.max(1e-4, tn - tj), 0, 1);
+        return [lerp(H[j * 3 + 1], H[jn * 3 + 1], u), lerp(H[j * 3 + 2], H[jn * 3 + 2], u)];
+      }
+    }
+    const j = (i - n + 64) % 64; return [H[j * 3 + 1], H[j * 3 + 2]];
+  }
+  function pushHeading(o, t) {
+    const H = o.hist, i = o.histI;
+    H[i * 3] = t; H[i * 3 + 1] = o.yaw; H[i * 3 + 2] = o.pitch;
+    o.histI = (i + 1) % 64; o.histN = Math.min(64, o.histN + 1);
+  }
+  function computeSpine(o, t, soft, out) {
+    const K = o.kd, ds = K.Smax / (SPN - 1), vEff = Math.max(1.6, o.spd), Lb = K.Lb;
+    const k = FCFG.wave * Math.PI * 2 / Lb, lag = soft ? FCFG.finLag : 0;
+    let X = Lb / 2, Y = 0, Z = 0;
+    for (let i = 0; i < SPN; i++) {
+      const s = i * ds, past = Math.max(0, s - Lb * 0.85) / Math.max(0.1, K.Smax - Lb * 0.85);
+      const delay = Math.min(1.4, (s / vEff) * (1 + lag * past * 1.6) + lag * past * 0.18);
+      const [hy, hp] = headingAt(o, t - delay);
+      const env = 0.12 + 0.88 * Math.pow(Math.min(s, Lb) / Lb, 1.6) + past * 0.5 * (soft ? 1 : 0.4);
+      let th = wrapPi(hy - o.yaw) + o.amp * env * Math.sin(o.phase - k * s - lag * past * 1.7);
+      th += o.curl * Math.min(1.2, s / Lb) * 1.4;
+      let ph = (hp - o.pitch) * 0.8 + o.arch * Math.min(1, s / Lb);
+      if (soft) ph += past * 0.22 * Math.sin(t * 3.1 + s * 0.9 + o.wag) * (0.4 + 0.6 * Math.min(1, o.spd / 3));
+      th = clamp(th, -1.5, 1.5); ph = clamp(ph, -1.2, 1.2);
+      out.th[i] = th; out.ph[i] = ph; out.X[i] = X; out.Y[i] = Y; out.Z[i] = Z;
+      X -= ds * Math.cos(th) * Math.cos(ph); Z += ds * Math.sin(th); Y += ds * Math.sin(ph);
+    }
+  }
+  function newSpine() { return { th: new Float32Array(SPN), ph: new Float32Array(SPN), X: new Float32Array(SPN), Y: new Float32Array(SPN), Z: new Float32Array(SPN) }; }
+  function deformKoi(o, t) {
+    const K = o.kd, G = K.geo, P = G.attributes.position.array, Nn = G.attributes.normal.array, R0 = K.rest.P, N0 = K.rest.N, m = K.meta;
+    const bend = FCFG.bend, soft = FCFG.softFins && bend;
+    if (!bend) { P.set(R0); Nn.set(N0); G.attributes.position.needsUpdate = true; G.attributes.normal.needsUpdate = true; placeEyes(o, null, t); return; }
+    const A = o.spA || (o.spA = newSpine()), B = o.spB || (o.spB = newSpine());
+    computeSpine(o, t, false, A);
+    if (soft) computeSpine(o, t, true, B);
+    // recoil: the fish pivots about a point a third of the way back, so the head swings a little against the tail
+    const ds = K.Smax / (SPN - 1), ip = Math.round(K.Lb * 0.3 / ds), rp = A.th[ip], cx = A.X[ip], cz = A.Z[ip], restX = K.Lb / 2 - ip * ds;
+    const cr = Math.cos(-rp), sr = Math.sin(-rp);
+    const fix = (S) => { for (let i = 0; i < SPN; i++) { const x = S.X[i] - cx, z = S.Z[i] - cz; S.X[i] = restX + x * cr + z * sr; S.Z[i] = -x * sr + z * cr; S.th[i] -= rp; } };
+    fix(A); if (soft) fix(B);
+    // paired fins: fan when slow, fold back when fast
+    const vn = clamp(o.spd / Math.max(0.5, o.cruise * 1.5), 0, 1);
+    const br = o.breath || 0, gillOpen = FCFG.gills ? 0.5 + 0.5 * Math.sin(br) : 0, puffNow = 0.5 + 0.5 * Math.sin(br);
+    const jaw = mouthOpen(o) * K.R * 0.09, jawS = K.Lb * 0.09;
+    const fold = 0.15 + 0.75 * vn, flapA = FCFG.pecFlap * (0.12 + 0.4 * (1 - vn)) * Math.sin(t * 4.2 + o.wag), flapB = FCFG.pecFlap * 0.15 * Math.sin(t * 3.3 + o.wag + 1);
+    const n = P.length / 3;
+    for (let i = 0; i < n; i++) {
+      let x = R0[i * 3], y = R0[i * 3 + 1], z = R0[i * 3 + 2], nx = N0[i * 3], nz = N0[i * 3 + 2];
+      const kind = m.K[i];
+      if (kind === KIND.pec || kind === KIND.pelvic) {
+        const side = m.side[i], ox = m.ox[i], oy = m.oy[i], oz = m.oz[i];
+        const fl = (kind === KIND.pec ? flapA : flapB) * side, fo = -side * (kind === KIND.pec ? fold : fold * 0.6);
+        const y1 = oy * Math.cos(fl) - oz * Math.sin(fl), z1 = oy * Math.sin(fl) + oz * Math.cos(fl);
+        const x2 = ox * Math.cos(fo) + z1 * Math.sin(fo), z2 = -ox * Math.sin(fo) + z1 * Math.cos(fo);
+        x = m.rx[i] + x2; y = m.ry[i] + y1; z = m.rz[i] + z2;
+      }
+      else if (kind === KIND.gill) z += m.side[i] * gillOpen * Math.pow(m.W[i], 1.6) * K.R * 0.2;
+      else if (kind === KIND.body) {
+        if (m.CK[i] > 0) z += Math.sign(z) * m.CK[i] * puffNow * K.R * 0.06;
+        if (jaw > 0 && y < -K.ry * 0.04) { const sj = K.Lb / 2 - x; if (sj < jawS) y -= jaw * (1 - sj / jawS); }
+      }
+      const s = clamp(K.Lb / 2 - x, 0, K.Smax - 1e-3), fi = s / ds, i0 = Math.floor(fi), i1 = Math.min(SPN - 1, i0 + 1), u = fi - i0;
+      const w = soft && kind !== KIND.gill ? m.W[i] : 0;
+      const sx = lerp(A.X[i0], A.X[i1], u), sy = lerp(A.Y[i0], A.Y[i1], u), sz = lerp(A.Z[i0], A.Z[i1], u);
+      let th = lerp(A.th[i0], A.th[i1], u), ph = lerp(A.ph[i0], A.ph[i1], u), X = sx, Y = sy, Z = sz;
+      if (w > 0) {
+        X = lerp(sx, lerp(B.X[i0], B.X[i1], u), w); Y = lerp(sy, lerp(B.Y[i0], B.Y[i1], u), w); Z = lerp(sz, lerp(B.Z[i0], B.Z[i1], u), w);
+        th = lerp(th, lerp(B.th[i0], B.th[i1], u), w); ph = lerp(ph, lerp(B.ph[i0], B.ph[i1], u), w);
+      }
+      const ct = Math.cos(th), st = Math.sin(th), cp = Math.cos(ph), sp = Math.sin(ph);
+      P[i * 3] = X + z * st + y * sp; P[i * 3 + 1] = Y + y * cp; P[i * 3 + 2] = Z + z * ct;
+      Nn[i * 3] = nx * ct + nz * st; Nn[i * 3 + 1] = N0[i * 3 + 1]; Nn[i * 3 + 2] = -nx * st + nz * ct;
+    }
+    G.attributes.position.needsUpdate = true; G.attributes.normal.needsUpdate = true;
+    placeEyes(o, A, t);
+  }
+  function placeEyes(o, A, t) {
+    if (!o.eyes) return;
+    const K = o.kd, e = K.eye;
+    let X = K.Lb / 2 - e.s, Y = 0, Z = 0, th = 0;
+    if (A) { const ds = K.Smax / (SPN - 1), fi = e.s / ds, i0 = Math.floor(fi), u = fi - i0; X = lerp(A.X[i0], A.X[i0 + 1], u); Y = lerp(A.Y[i0], A.Y[i0 + 1], u); Z = lerp(A.Z[i0], A.Z[i0 + 1], u); th = lerp(A.th[i0], A.th[i0 + 1], u); }
+    // blinking: a body-colored lid slides down over the eye and back up (real koi have no eyelids, but it reads as alive)
+    let lid = 0;
+    if (FCFG.blink) { o.blinkT -= o.lastDt || 0; if (o.blinkT < 0) { o.blinkT = 2.5 + Math.random() * 4.5; o.blinkAt = t; if (Math.random() < 0.2) o.blinkT = 0.32; } const bt = t - (o.blinkAt ?? -9); if (bt < 0.26) lid = Math.sin(Math.PI * bt / 0.26); }
+    for (const E of o.eyes) {
+      const zz = e.z * E.side;
+      E.g.position.set(X + zz * Math.sin(th), Y + e.y, Z + zz * Math.cos(th));
+      E.g.rotation.set(0, th, 0);
+      E.lid.visible = lid > 0.03 && FCFG.eyes;
+      if (E.lid.visible) { const rl = E.r * 1.32; E.lid.scale.set(1, lid, 1); E.lid.position.set(0, rl * (1 - lid), 0); }
+      // the pupil looks: outward, turned toward where the fish is looking
+      const ly = FCFG.eyes ? o.look.x : 0, lp = FCFG.eyes ? o.look.y : 0;
+      const d = V(Math.sin(ly) * 0.9, Math.sin(lp) * 0.8, E.side * Math.cos(ly)).normalize();
+      E.pupil.position.copy(d).multiplyScalar(E.r * 0.52);
+      E.glint.visible = FCFG.glint && FCFG.eyes;
+      E.glint.position.set(E.r * 0.42, E.r * 0.62, E.side * E.r * 0.62);
+      E.ball.visible = FCFG.eyes;
+    }
+    if (o.mouth) {
+      const mo = K.mouth, open = mouthOpen(o);
+      let mX = K.Lb / 2 - mo.s, mY = 0, mZ = 0;
+      if (A) { const ds = K.Smax / (SPN - 1), fi = mo.s / ds, i0 = Math.floor(fi), u = fi - i0; mX = lerp(A.X[i0], A.X[i0 + 1], u); mY = lerp(A.Y[i0], A.Y[i0 + 1], u); mZ = lerp(A.Z[i0], A.Z[i0 + 1], u); }
+      o.mouth.visible = FCFG.mouth;
+      o.mouth.position.set(mX, mY + mo.y - open * mo.r * 0.35, mZ);
+      o.mouth.scale.set(0.45, 0.22 + 0.78 * open, 0.75);
+    }
+  }
+  function mouthOpen(o) {
+    if (!FCFG.mouth) return 0;
+    const g = o.gulpT > 0 ? Math.sin(Math.PI * o.gulpT / 0.45) : 0;
+    return Math.max(g, 0.12 + 0.3 * (0.5 + 0.5 * Math.sin((o.breath || 0) + Math.PI)));     // opens as the gills close
+  }
+
+  // ---- fish objects
+  function pickVariety() {
+    const pool = FCFG.koiOnly ? FISH.filter((f) => !f.gold) : FISH;
+    const total = pool.reduce((s, f) => s + f.w, 0);
+    let r = Math.random() * total;
+    for (const f of pool) { r -= f.w; if (r <= 0) return f; }
+    return pool[0];
+  }
+  function newFish(name, lf, pc) {
+    const v = (name && FISH.find((x) => x.name === name)) || pickVariety();
+    return { v: v.name, size: +(v.size[0] + Math.random() * (v.size[1] - v.size[0])).toFixed(2), s: Math.floor(Math.random() * 1e9), lf: lf ?? (!v.gold && Math.random() < FCFG.longFins ? 1 : 0), pc: pc ?? (!v.gold && Math.random() < FCFG.puffy ? 1 : 0) };
+  }
+  function makeFishObj(i) {
+    const f = state.fish[i], v = FISH.find((x) => x.name === f.v) || FISH[0];
+    const o = { f, v, p: swimPoint(), vel: V(Math.random() - 0.5, 0, Math.random() - 0.5), t: swimPoint(), wag: Math.random() * 6, surfacing: false, mode: 'swim', mt: 0 };
+    if (FCFG.classic) {
+      o.mesh = new T.Mesh(fishGeometryClassic(f), sceneMat); o.classic = true;
+    } else {
+      o.kd = koiGeometry(f, v);
+      o.mesh = new T.Mesh(o.kd.geo, sceneMat);
+      o.yaw = Math.random() * 6.28; o.pitch = 0; o.roll = 0; o.spd = 1; o.yawRate = 0; o.thrust = 0.5; o.amp = 0.1; o.phase = Math.random() * 6;
+      o.curl = 0; o.arch = 0; o.cruise = v.speed; o.kg = { kick: true, left: 1 }; o.look = { x: 0, y: 0, tx: 0, ty: 0, next: 1 }; o.blinkT = 2 + Math.random() * 4;
+      o.hist = new Float32Array(64 * 3); o.histI = 0; o.histN = 0; o.hover = 0; o.goal = null;
+      makeEyes(o);
+    }
+    o.mesh.frustumCulled = false; o.mesh.rotation.order = 'YZX'; fishGroup.add(o.mesh);
+    return o;
+  }
+  function disposeFish(o) { fishGroup.remove(o.mesh); o.mesh.geometry.dispose(); if (o.eyes) o.eyes.forEach((E) => [E.ball, E.pupil, E.glint, E.lid].forEach((m) => m.geometry.dispose())); if (o.mouth) o.mouth.geometry.dispose(); }
+  function syncFish() {
+    const shown = Math.max(0, state.fish.length - (state.pendingFish || 0));
+    while (fishObjs.length > shown) disposeFish(fishObjs.pop());
+    for (let i = fishObjs.length; i < shown; i++) fishObjs.push(makeFishObj(i));
+    updateFishLabel();
+  }
+  function rebuildFish() { while (fishObjs.length) disposeFish(fishObjs.pop()); scene2 = null; syncFish(); }
+
+  // ---- swimming: a heading that turns at a limited rate, a tail that kicks and glides, a lean into turns
+  function steer(o, dt, t, water) {
+    const g = o.goal, cruise = o.cruise * FCFG.speed;
+    let tgt, vDes;
+    if (g) { tgt = g.p; vDes = g.v; }
+    else {
+      if (o.mode === 'swim' && (o.p.distanceTo(o.t) < 3 || Math.random() < dt * 0.04)) {
+        o.t = swimPoint(); o.surfacing = Math.random() < 0.12; if (o.surfacing) o.t.y = water - 0.7;
+        if (Math.random() < 0.18) o.hover = 1.5 + Math.random() * 2.5;        // now and then it stops and hangs there
+      }
+      tgt = o.t; vDes = cruise * (0.8 + 0.25 * Math.sin(t * 0.3 + o.wag));
+      if (o.hover > 0) { o.hover -= dt; vDes = cruise * 0.08; }
+      if (o.mode === 'celebrate') vDes = cruise * 2.2;
+    }
+    const d = tgt.clone().sub(o.p), dist = d.length(), hold = g && g.hold && dist < 1.1;
+    if (hold) vDes = 0;
+    else if (g && dist < 2.5) vDes *= 0.4 + 0.6 * dist / 2.5;
+    // turning: aim at the target, or face the way the scene asks while holding still
+    let want = yawTo(d);
+    if (hold && g.face) want = yawTo(g.face);
+    // look ahead for the glass
+    const ahead = o.p.clone().addScaledVector(fwdOf(o.yaw), 3 + o.spd * 0.6);
+    let maxTurn = FCFG.turn * (g && g.fast ? 1.9 : 1) * (o.mode === 'celebrate' ? 1.5 : 1);
+    if (!inside(ahead.x, ahead.z, 3)) { want = yawTo(V(-o.p.x, 0, -o.p.z)); maxTurn *= 1.8; if (!g) o.t = swimPoint(); }
+    const dy = wrapPi(want - o.yaw);
+    o.yawRate += (clamp(dy * (hold ? 1.2 : 2), -maxTurn, maxTurn) - o.yawRate) * (1 - Math.exp(-dt * 4));
+    o.yaw += o.yawRate * dt;
+    const pitchT = hold && g.pitch != null ? g.pitch : clamp(Math.atan2(d.y, Math.hypot(d.x, d.z) + 0.5), -0.5, 0.5) * (dist > 0.6 ? 1 : 0);
+    o.pitch += (pitchT - o.pitch) * (1 - Math.exp(-dt * 2));
+    // kick and glide
+    const vMax = Math.max(0.3, vDes * 1.55), drag = 1.0;
+    if (FCFG.glide > 0.02 && !hold) {
+      o.kg.left -= dt;
+      if (o.kg.kick && o.kg.left <= 0) { o.kg.kick = false; o.kg.left = (0.4 + Math.random() * 1.2) * FCFG.glide * 2; }
+      else if (!o.kg.kick && (o.kg.left <= 0 || o.spd < vDes * 0.6 || Math.abs(o.yawRate) > 0.9)) { o.kg.kick = true; o.kg.left = (1.5 + Math.random() * 1.5) / Math.max(0.3, FCFG.beatHz + FCFG.beatSpeedHz * o.spd); }
+      o.thrustT = o.kg.kick ? 1 : 0.06;
+    } else o.thrustT = vMax > 0 ? clamp(vDes / vMax, 0, 1) : 0;
+    if (g && g.fast) o.thrustT = Math.max(o.thrustT, 1.25);
+    o.thrust += (o.thrustT - o.thrust) * (1 - Math.exp(-dt * 5));
+    o.spd += (o.thrust * drag * vMax - drag * o.spd) * dt;
+    o.spd = Math.max(0, o.spd - Math.abs(o.yawRate) * 0.15 * dt);
+    tailBeat(o, dt, 1);
+    o.roll += (clamp(-o.yawRate * o.spd * 0.12 * FCFG.bank, -0.55, 0.55) - o.roll) * (1 - Math.exp(-dt * 3));
+    o.p.addScaledVector(fwdOf(o.yaw, o.pitch), o.spd * dt);
+    if (!inside(o.p.x, o.p.z, 2.5)) pullInside(o.p, 0.92);
+    const floor = terrain.height(o.p.x, o.p.z) + 1.4;
+    if (o.p.y < floor) o.p.y += (floor - o.p.y) * Math.min(1, dt * 4);
+    if (o.p.y > water - 0.6) o.p.y = water - 0.6;
+    if (o.surfacing && o.p.y > water - 1.0) { addRipple(o.p.x, o.p.z, 0.35, U.uTime.value); o.surfacing = false; o.t = swimPoint(); }
+    // eyes: little jumps to new spots, leading into turns, or watching what the scene points at
+    o.look.next -= dt;
+    if (o.look.next <= 0) { o.look.next = 0.5 + Math.random() * 2; o.look.tx = (Math.random() - 0.5) * 0.9; o.look.ty = (Math.random() - 0.5) * 0.7; }
+    let lx = o.look.tx + clamp(o.yawRate * 0.35, -0.5, 0.5), lyy = o.look.ty;
+    if (g && g.look) { const q = g.look.clone().sub(o.p); lx = clamp(wrapPi(yawTo(q) - o.yaw), -0.7, 0.7); lyy = clamp(Math.atan2(q.y, Math.hypot(q.x, q.z)) - o.pitch, -0.6, 0.6); }
+    o.look.x += (lx - o.look.x) * Math.min(1, dt * 14); o.look.y += (lyy - o.look.y) * Math.min(1, dt * 14);
+  }
+  function tailBeat(o, dt, k) {
+    const ampT = FCFG.beatAmp * (0.12 + 0.88 * Math.min(1.4, o.thrust)) * k + Math.min(0.2, Math.abs(o.yawRate) * 0.08);
+    o.amp += (ampT - o.amp) * (1 - Math.exp(-dt * 4));
+    o.phase += Math.PI * 2 * (FCFG.beatHz + FCFG.beatSpeedHz * o.spd) * (0.35 + 0.65 * Math.min(1.5, o.thrust)) * dt;
+    o.curl *= Math.exp(-dt * 5); o.arch *= Math.exp(-dt * 3);
+    o.breath = (o.breath || Math.random() * 6) + Math.PI * 2 * FCFG.breathHz * (1 + 0.5 * Math.min(1, o.thrust)) * dt;
+    if (o.gulpT > 0) o.gulpT -= dt;
+  }
+  function poseKoi(o, dt, t) {
+    o.mesh.position.copy(o.p);
+    let yaw = o.yaw;
+    if (!FCFG.bend) yaw += Math.sin(o.phase) * o.amp * 0.5;      // no bending: the old stiff wag
+    o.mesh.rotation.set(o.roll, yaw, o.pitch);
+    pushHeading(o, t);
+    o.lastDt = dt;
+    deformKoi(o, t);
+  }
+  function startle(o, awayFrom, k = 1) {
+    const d = o.p.clone().sub(awayFrom); d.y = 0; if (d.lengthSq() < 0.01) d.set(1, 0, 0);
+    const side = Math.sign(wrapPi(yawTo(d) - o.yaw)) || 1;
+    o.curl = -side * 0.85 * k; o.spd += 3 * k; o.thrust = 1.4;
+  }
+
+  // ---- the jump: a burst toward the surface, a real arc with the nose following the flight, a head-first landing
+  const G_AIR = 34;
+  function pokeFish(o) {
+    if (o.classic || !FCFG.leap2) return pokeFishClassic(o);
+    if (o.mode !== 'swim' && o.mode !== 'celebrate') return;
+    if (o.goal && scene2) endScene();
+    let dir = V(-o.p.x, 0, -o.p.z).normalize();
+    if (dir.lengthSq() < 0.1) dir = V(1, 0, 0);
+    dir.applyAxisAngle(UP, (Math.random() - 0.5) * 1.6);
+    if (!inside(o.p.x + dir.x * 9, o.p.z + dir.z * 9, 3)) dir.negate();
+    o.mode = 'leap2'; o.goal = null;
+    o.lp = { ph: 'rush', t: 0, dir, twist: Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) : 0, H: 4.2 + Math.random() * 1.8, D: 6 + Math.random() * 2.5 };
+    startle(o, o.p.clone().addScaledVector(dir, -2), 0.8);
+  }
+  function leap2Step(o, dt, t, water) {
+    const L = o.lp; L.t += dt;
+    if (L.ph === 'rush') {
+      const tgt = o.p.clone().addScaledVector(L.dir, 2.5); tgt.y = water + 0.5;
+      o.goal = { p: tgt, v: 11, fast: true, look: tgt }; steer(o, dt, t, water); o.goal = null;
+      o.pitch = Math.max(o.pitch, lerp(0, 0.75, Math.min(1, L.t * 2)));
+      if (o.p.y >= water - 0.75 || L.t > 2.4) {
+        const vy = Math.sqrt(2 * G_AIR * L.H), T_ = 2 * vy / G_AIR;
+        let D = L.D; while (D > 2 && !inside(o.p.x + L.dir.x * D, o.p.z + L.dir.z * D, 3)) D -= 0.5;
+        L.vel = V(L.dir.x * D / T_, vy, L.dir.z * D / T_); L.ph = 'air'; L.t = 0; L.T = T_;
+        o.yaw += wrapPi(yawTo(L.dir) - o.yaw);
+        addRipple(o.p.x, o.p.z, 0.9, U.uTime.value); splash(o.p.x, water, o.p.z, 18, 0.7);
+      }
+    } else if (L.ph === 'air') {
+      L.vel.y -= G_AIR * dt; o.p.addScaledVector(L.vel, dt);
+      const u = clamp(L.t / L.T, 0, 1), hs = Math.hypot(L.vel.x, L.vel.z);
+      o.pitch = Math.atan2(L.vel.y, hs);
+      o.arch = -0.32 * Math.sin(Math.PI * u);                         // a bow shape over the top of the arc
+      o.roll = L.twist ? L.twist * Math.PI * 0.5 * ease(u) : 0.22 * Math.sin(u * Math.PI * 2);
+      o.thrust = 0.9; o.spd = Math.hypot(hs, L.vel.y);
+      tailBeat(o, dt, 1.5);
+      o.look.x += (0 - o.look.x) * Math.min(1, dt * 10); o.look.y += (-0.5 - o.look.y) * Math.min(1, dt * 10);
+      if (Math.random() < 0.6) splashes.push({ x: o.p.x - L.vel.x * 0.05, y: o.p.y, z: o.p.z - L.vel.z * 0.05, vx: (Math.random() - 0.5) * 1.5, vz: (Math.random() - 0.5) * 1.5, vy: L.vel.y * 0.2 });
+      if (o.p.y < water && L.vel.y < 0) {
+        L.ph = 'under'; L.t = 0;
+        const big = L.twist ? 1.15 : 0.75;
+        addRipple(o.p.x, o.p.z, 1.3 * big, U.uTime.value); addRipple(o.p.x, o.p.z, 0.7, U.uTime.value + 0.3); splash(o.p.x, water, o.p.z, Math.round(26 * big), big);
+        L.trail = 0.7;
+      }
+    } else if (L.ph === 'under') {
+      L.vel.multiplyScalar(Math.exp(-dt * 2.6)); L.vel.y += 16 * dt;                    // slows and curves back up, a J under the water
+      o.p.addScaledVector(L.vel, dt);
+      const hs = Math.hypot(L.vel.x, L.vel.z), floor = terrain.height(o.p.x, o.p.z) + 1.6;
+      if (o.p.y < floor) { o.p.y = floor; L.vel.y = Math.max(0, L.vel.y); }
+      if (o.p.y > water - 1.2) { o.p.y = water - 1.2; L.vel.y = Math.min(0, L.vel.y); }
+      if (!inside(o.p.x, o.p.z, 2.5)) pullInside(o.p, 0.92);
+      o.pitch += (Math.atan2(L.vel.y, hs + 0.5) - o.pitch) * Math.min(1, dt * 6);
+      o.roll *= Math.exp(-dt * 5); o.spd = L.vel.length();
+      if (L.trail > 0) { L.trail -= dt; bubbles.push({ x: o.p.x + (Math.random() - 0.5) * 0.6, z: o.p.z + (Math.random() - 0.5) * 0.6, y: o.p.y + 0.3, vy: 0.8 + Math.random(), size: 0.2 + Math.random() * 0.4, ph: Math.random() * 6 }); }
+      o.thrust = 0.5; tailBeat(o, dt, 0.8);
+      if (L.t > 1.1) { L.ph = 'shake'; L.t = 0; }
+    } else {                                                          // shakes it off, then swims away
+      o.p.addScaledVector(L.vel, dt); L.vel.multiplyScalar(Math.exp(-dt * 3));
+      o.amp = 0.16; o.phase += Math.PI * 2 * 6.5 * dt; o.pitch *= Math.exp(-dt * 4);
+      if (L.t > 0.4) { o.mode = 'swim'; o.spd = Math.max(1.5, L.vel.length()); o.thrust = 1; o.kg = { kick: true, left: 1.2 }; o.t = swimPoint(); o.lp = null; }
+    }
+  }
+
+  // ---- the first dive: still drops in from above the screen, but it falls nose-first, wriggling, and enters like a diver
+  function dive2Step(o, dt, t, water) {
+    o.mt += dt;
+    const m = o.mesh;
+    if (o.mt < 0) return;
+    if (!o.intro) {
+      const { front, right } = viewAxes();
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const entry = right.clone().multiplyScalar(side * (4 + Math.random() * 14)).addScaledVector(front, shape.b * 0.3);
+      pullInside(entry, 0.7); entry.y = water;
+      const start = entry.clone().addScaledVector(right, -side * 9);
+      camera.updateMatrixWorld();
+      for (start.y = water + 8; start.y < 400; start.y += 2) if (toScreen(start)[1] < -70) break;
+      const exitDir = right.clone().multiplyScalar(side);
+      const floor = terrain.height(entry.x, entry.z) + 2.2;
+      const deep = entry.clone().addScaledVector(exitDir, 2.5); deep.y = Math.max(floor, water - 7.5);
+      const exit = entry.clone().addScaledVector(exitDir, 7.5); pullInside(exit, 0.75); exit.y = Math.max(floor + 1, water - 4.5);
+      o.intro = { start, entry, deep, exit, prev: start.clone() };
+      m.visible = true; m.scale.setScalar(1);
+    }
+    const I = o.intro, tt = o.mt;
+    if (tt < INTRO.fall) {
+      const u = tt / INTRO.fall, sY = 0.65 * u + 0.35 * u * u, sX = Math.sin(u * Math.PI / 2);
+      o.p.set(lerp(I.start.x, I.entry.x, sX), lerp(I.start.y, I.entry.y, sY), lerp(I.start.z, I.entry.z, sX));
+      const vel = o.p.clone().sub(I.prev).divideScalar(Math.max(dt, 1e-3)); I.prev.copy(o.p);
+      if (vel.lengthSq() > 0.01) { o.yaw += wrapPi(yawTo(V(I.entry.x - I.start.x, 0, I.entry.z - I.start.z)) - o.yaw); o.pitch = lerp(-0.3, Math.atan2(vel.y, Math.hypot(vel.x, vel.z)), Math.min(1, u * 5)); }
+      o.roll = 0.35 * Math.sin(u * Math.PI * 2.5);
+      o.spd = 6; o.thrust = 1.1; tailBeat(o, dt, 1.6);
+      o.look.y += (-0.6 - o.look.y) * Math.min(1, dt * 8);
+      if (Math.random() < 0.35) sparkle(o.p.x, o.p.y + 0.5, o.p.z, 1, 0.8);
+    } else {
+      if (!o.splashed) {
+        o.splashed = true;
+        addRipple(I.entry.x, I.entry.z, 2.0, U.uTime.value); addRipple(I.entry.x, I.entry.z, 1.0, U.uTime.value + 0.35);
+        splash(I.entry.x, water, I.entry.z, 60, 0.9);
+        for (let k = 0; k < 26; k++) bubbles.push({ x: I.entry.x + (Math.random() - 0.5) * 1.6, z: I.entry.z + (Math.random() - 0.5) * 1.6, y: water - 0.6 - Math.random() * 4, vy: 1 + Math.random() * 2, size: 0.3 + Math.random() * 0.5, ph: Math.random() * 6 });
+      }
+      const u = Math.min(1, (tt - INTRO.fall) / (INTRO.under * 1.3)), e = 1 - Math.pow(1 - u, 2.2);
+      // a curve: down from the entry, bottoming out, then level and away
+      const a = I.entry, b = I.deep, c = I.exit, q = 1 - e;
+      o.p.set(q * q * a.x + 2 * q * e * b.x + e * e * c.x, q * q * a.y + 2 * q * e * b.y + e * e * c.y, q * q * a.z + 2 * q * e * b.z + e * e * c.z);
+      const dv = V(2 * q * (b.x - a.x) + 2 * e * (c.x - b.x), 2 * q * (b.y - a.y) + 2 * e * (c.y - b.y), 2 * q * (b.z - a.z) + 2 * e * (c.z - b.z));
+      o.yaw += wrapPi(yawTo(dv) - o.yaw); o.pitch = Math.atan2(dv.y, Math.hypot(dv.x, dv.z)); o.roll *= Math.exp(-dt * 4);
+      if (u < 0.5 && Math.random() < 0.5) bubbles.push({ x: o.p.x, z: o.p.z, y: o.p.y + 0.4, vy: 1 + Math.random(), size: 0.25, ph: Math.random() * 6 });
+      o.spd = 4; o.thrust = 1.2; tailBeat(o, dt, 1.2);
+      if (u >= 1) { o.spd = 5; o.thrust = 1; startCelebration(o, water); }
+    }
+  }
+
+  // ---- playful moments: short scenes that steer a few fish, then let them go
+  let scene2 = null, nextPlay = 25;
+  const SCENES = ['chase', 'circle', 'follow', 'surface', 'scatter', 'nibble', 'kiss'];
+  function freeFish() { return fishObjs.filter((o) => !o.classic && o.mode === 'swim'); }
+  function endScene() { if (!scene2) return; scene2.fish.forEach((o) => { o.goal = null; o.hover = 0; }); scene2 = null; }
+  function startScene(type) {
+    if (FCFG.classic) return false;
+    endScene();
+    const pool = freeFish().sort(() => Math.random() - 0.5);
+    const need = { chase: 2, circle: 2, kiss: 2, follow: 2, surface: 1, scatter: 1, nibble: 1 }[type] || 1;
+    if (pool.length < need) return false;
     const water = U.uWater.value;
+    const S = { type, t: 0, fish: [], data: {} };
+    if (type === 'chase' || type === 'circle' || type === 'kiss') S.fish = pool.slice(0, 2);
+    else if (type === 'nibble') S.fish = pool.slice(0, 1);
+    else S.fish = pool;
+    if (type === 'circle') { const c = S.fish[0].p.clone().add(S.fish[1].p).multiplyScalar(0.5); pullInside(c, 0.55); c.y = clamp(water * 0.5, terrain.height(c.x, c.z) + 3.5, water - 2.5); S.data = { c, R: Math.max(...S.fish.map((o) => o.kd.Lb)) * 0.65, a0: Math.random() * 6.28 }; }
+    if (type === 'surface') { const c = swimPoint(); S.data = { c, offs: S.fish.map((o, i) => { const a = i * 2.4 + Math.random(); return V(Math.cos(a) * (1.6 + i * 0.7), 0, Math.sin(a) * (1.6 + i * 0.7)); }) }; }
+    if (type === 'scatter') { const c = swimPoint(); S.data = { c }; S.fish.forEach((o) => { startle(o, c, 1.2); const d = o.p.clone().sub(c); d.y = 0; d.normalize(); const p = pullInside(o.p.clone().addScaledVector(d, 14), 0.8); p.y = o.p.y; o.goal = { p, v: o.cruise * 3.2, fast: true }; }); addRipple(c.x, c.z, 0.6, U.uTime.value); }
+    if (type === 'nibble') { const o = S.fish[0], q = swimPoint(); q.y = terrain.height(q.x, q.z) + 1.0; S.data = { q, peck: 0 }; }
+    if (type === 'kiss') { const [a, b] = S.fish, m = a.p.clone().add(b.p).multiplyScalar(0.5); pullInside(m, 0.65); m.y = clamp(m.y, terrain.height(m.x, m.z) + 3, water - 2); const ax = b.p.clone().sub(a.p); ax.y = 0; if (ax.lengthSq() < 0.01) ax.set(1, 0, 0); ax.normalize(); S.data = { m, ax, held: 0, parted: false }; }
+    if (type === 'follow') { S.data = { lead: S.fish[0], trail: [], ang: Math.atan2(S.fish[0].p.z / shape.b, S.fish[0].p.x / shape.a), next: 0 }; }
+    if (type === 'chase') S.data = { chaser: S.fish[0], runner: S.fish[1], swapped: false, dart: 0 };
+    scene2 = S;
+    return true;
+  }
+  function stepScene(dt, t, water) {
+    if (!scene2) {
+      if (!FCFG.play || FCFG.classic) return;
+      nextPlay -= dt;
+      if (nextPlay <= 0) {
+        nextPlay = FCFG.playEvery * (0.6 + Math.random() * 0.8);
+        const n = freeFish().length, opts = n >= 2 ? SCENES : ['surface', 'nibble'];
+        startScene(opts[Math.floor(Math.random() * opts.length)]);
+      }
+      return;
+    }
+    const S = scene2, D = S.data; S.t += dt;
+    if (S.fish.some((o) => o.mode !== 'swim' || !fishObjs.includes(o))) { endScene(); return; }
+    if (S.type === 'chase') {
+      const { chaser: a, runner: b } = D;
+      a.goal = { p: b.p.clone().addScaledVector(fwdOf(b.yaw), 2), v: a.cruise * 2.0, fast: true, look: b.p };
+      D.dart -= dt;
+      if (D.dart <= 0 || !b.goal) {
+        D.dart = 0.6 + Math.random() * 0.7;
+        const away = b.p.clone().sub(a.p); away.y = 0; away.normalize().applyAxisAngle(UP, (Math.random() - 0.5) * 1.8);
+        const p = pullInside(b.p.clone().addScaledVector(away, 10), 0.8); p.y = clamp(b.p.y + (Math.random() - 0.5) * 4, terrain.height(p.x, p.z) + 2, water - 1.5);
+        b.goal = { p, v: b.cruise * 2.2, fast: true, look: a.p };
+      }
+      if ((a.p.distanceTo(b.p) < 1.6 || S.t > 4.5) && !D.swapped) { D.swapped = true; D.chaser = b; D.runner = a; startle(a, b.p, 1); D.dart = 0; }
+      if (S.t > 9.5) endScene();
+    } else if (S.type === 'circle') {
+      const w = 0.7, { c, R, a0 } = D;
+      S.fish.forEach((o, i) => {
+        const ang = a0 + i * Math.PI + S.t * w + 0.55;
+        o.goal = { p: V(c.x + Math.cos(ang) * R, c.y, c.z + Math.sin(ang) * R), v: Math.max(o.cruise * 0.9, w * R * 1.25), look: S.fish[1 - i].p };
+      });
+      if (S.t > 11) endScene();
+    } else if (S.type === 'follow') {
+      const L = D.lead; D.next -= dt;
+      if (D.next <= 0 || !L.goal) { D.ang += 0.9; D.next = 2.2; const q = boundary(D.ang, 0.62); L.goal = { p: V(q.x, clamp(water * (0.45 + 0.2 * Math.sin(D.ang)), 4, water - 2), q.z), v: L.cruise * 1.3 }; }
+      D.trail.push({ t: S.t, p: L.p.clone() }); while (D.trail.length > 400) D.trail.shift();
+      S.fish.slice(1).forEach((o, i) => {
+        const tq = S.t - (i + 1) * 1.1; let q = D.trail[0].p;
+        for (let k = D.trail.length - 1; k >= 0; k--) if (D.trail[k].t <= tq) { q = D.trail[k].p; break; }
+        o.goal = { p: q.clone(), v: L.cruise * (o.p.distanceTo(q) > 3 ? 1.8 : 1.35), look: L.p };
+      });
+      if (S.t > 13) endScene();
+    } else if (S.type === 'surface') {
+      S.fish.forEach((o, i) => {
+        const p = D.c.clone().add(D.offs[i]); pullInside(p, 0.85); p.y = water - 0.75;
+        o.goal = { p, v: o.cruise * 1.2, hold: true, pitch: 0.4, face: D.c.clone().sub(p).applyAxisAngle(UP, 1.2) };
+        if (o.p.distanceTo(p) < 1.3) { o.gulp = (o.gulp || Math.random()) - dt; if (o.gulp <= 0) { o.gulp = 0.5 + Math.random() * 0.6; o.gulpT = 0.45; const nose = o.p.clone().addScaledVector(fwdOf(o.yaw, o.pitch), o.kd.Lb * 0.5); addRipple(nose.x, nose.z, 0.16, U.uTime.value); bubbles.push({ x: nose.x, z: nose.z, y: water - 0.5, vy: 1, size: 0.2, ph: 0 }); } }
+      });
+      if (S.t > 9) endScene();
+    } else if (S.type === 'scatter') {
+      if (S.t > 1.5) S.fish.forEach((o) => { o.goal = null; });
+      if (S.t > 1.6) endScene();
+    } else if (S.type === 'nibble') {
+      const o = S.fish[0], q = D.q, near = o.p.distanceTo(q) < 1.6;
+      o.goal = { p: q.clone().add(V(0, 0.9, 0)), v: o.cruise * 0.9, hold: true, pitch: -0.55, look: q };
+      if (near) { D.peck -= dt; if (D.peck <= 0) { D.peck = 0.55 + Math.random() * 0.4; o.spd += 1.3; o.curl += (Math.random() - 0.5) * 0.2; for (let k = 0; k < 4; k++) bubbles.push({ x: q.x + (Math.random() - 0.5) * 0.8, z: q.z + (Math.random() - 0.5) * 0.8, y: q.y + 0.2, vy: 0.5 + Math.random(), size: 0.12, ph: Math.random() * 6 }); } }
+      if (S.t > 8) endScene();
+    } else if (S.type === 'kiss') {
+      const [a, b] = S.fish, { m, ax } = D;
+      if (!D.parted) {
+        const pa = m.clone().addScaledVector(ax, -(a.kd.Lb * 0.5 + 0.25)), pb = m.clone().addScaledVector(ax, b.kd.Lb * 0.5 + 0.25);
+        a.goal = { p: pa, v: a.cruise, hold: true, face: ax, look: b.p }; b.goal = { p: pb, v: b.cruise, hold: true, face: ax.clone().negate(), look: a.p };
+        if (a.p.distanceTo(pa) < 0.9 && b.p.distanceTo(pb) < 0.9) D.held += dt;
+        if (D.held > 1.4 || S.t > 10) {
+          D.parted = true; S.t2 = S.t;
+          [a, b].forEach((o, i) => { const side = ax.clone().applyAxisAngle(UP, i ? 2.2 : -2.2).multiplyScalar(i ? 1 : -1); const p = pullInside(o.p.clone().addScaledVector(side, 9), 0.8); p.y = o.p.y; o.goal = { p, v: o.cruise * 1.6 }; o.curl = (i ? 0.5 : -0.5); });
+        }
+      } else if (S.t - S.t2 > 2.2) endScene();
+    }
+  }
+
+  let fishClock = 0;
+  function updateFish(dtReal, tReal) {
+    const water = U.uWater.value;
+    // koi live on their own, slower clock (FCFG.pace); ripples and splashes stay in real time
+    const dt = dtReal * FCFG.pace; fishClock += dt; const t = fishClock;
+    stepScene(dt, t, water);
     for (const o of fishObjs) {
-      if (o.mode === 'intro') { introStep(o, dt, t, water); continue; }
-      if (o.mode === 'leap') { leapStep(o, dt, t, water); continue; }
-      const celebrating = o.mode === 'celebrate';
-      if (celebrating) {
+      if (o.classic) { updateFishClassic(o, dtReal, tReal, water); continue; }
+      if (o.mode === 'intro') {
+        const k = o.mt < INTRO.fall ? 1 / FCFG.pace : 1;            // the drop from the sky keeps its own 2.8 s
+        if (FCFG.dive2) dive2Step(o, dt * k, t, water); else introStepKoi(o, dt * k, t, water);
+        poseKoi(o, dt * k, t); continue;
+      }
+      if (o.mode === 'leap2') { leap2Step(o, dt, t, water); poseKoi(o, dt, t); continue; }
+      if (o.mode === 'leap') {          // the classic jump, when the new one is switched off
+        leapStep(o, dt, t, water); const r = o.mesh.rotation;
+        o.yaw += wrapPi(r.y - o.yaw); o.pitch = r.z; o.roll = r.x; o.amp = 0.2; o.phase += dt * 10;
+        pushHeading(o, t); deformKoi(o, t);
+        if (o.mode === 'swim') { o.spd = 4; o.pitch = wrapPi(o.pitch); o.roll = 0; }
+        continue;
+      }
+      if (o.mode === 'celebrate') {
         o.mt += dt;
         if (o.mt > 8) o.mode = 'swim';
         else if (o.p.distanceTo(o.t) < 3.5) { o.lap += 1; const q = boundary(o.lapA + 1.2 + o.lap * 1.1, 0.6); o.t = V(q.x, clamp(water * (0.4 + 0.3 * (o.lap % 2)), 4, water - 2.5), q.z); }
-      } else if (o.p.distanceTo(o.t) < 3 || Math.random() < dt * 0.04) {
-        o.t = swimPoint();
-        o.surfacing = Math.random() < 0.12;
-        if (o.surfacing) o.t.y = water - 0.7;
       }
-      const sp = o.v.speed * (celebrating ? 2.4 : 0.75 + 0.25 * Math.sin(t * 0.3 + o.wag));
-      const want = o.t.clone().sub(o.p).normalize().multiplyScalar(sp);
-      want.y *= 0.5;
-      o.vel.lerp(want, 1 - Math.exp(-dt * (celebrating ? 1.6 : 0.7)));
-      o.p.addScaledVector(o.vel, dt);
-      if (!inside(o.p.x, o.p.z, 3)) { pullInside(o.p, 0.9); if (!celebrating) o.t = swimPoint(); }
-      const floor = terrain.height(o.p.x, o.p.z) + 1.4;
-      if (o.p.y < floor) o.p.y += (floor - o.p.y) * Math.min(1, dt * 4);
-      if (o.p.y > water - 0.6) o.p.y = water - 0.6;
-      if (o.surfacing && o.p.y > water - 1.0) { addRipple(o.p.x, o.p.z, 0.35, t); o.surfacing = false; o.t = swimPoint(); }
-      o.mesh.position.copy(o.p);
-      const yaw = -Math.atan2(o.vel.z, o.vel.x);
-      const wagRate = o.v.speed * (celebrating ? 4.5 : 2.2);
-      o.mesh.rotation.set(celebrating ? Math.sin(o.mt * 3) * 0.25 : 0, yaw + Math.sin(t * wagRate + o.wag) * (celebrating ? 0.22 : 0.14), Math.atan2(o.vel.y, Math.hypot(o.vel.x, o.vel.z)) * 0.5);
+      steer(o, dt, t, water);
+      poseKoi(o, dt, t);
     }
+  }
+  // the classic drop-in, used by a koi when the new dive is switched off
+  function introStepKoi(o, dt, t, water) {
+    introStepClassic(o, dt, t, water);
+    const r = o.mesh.rotation; o.yaw += wrapPi(r.y - o.yaw); o.pitch = r.z; o.roll = r.x; o.amp = 0.2; o.phase += dt * 10;
+    if (o.mode === 'celebrate') { o.yaw += wrapPi(yawTo(o.vel) - o.yaw); o.spd = 5; o.pitch = 0; o.roll = 0; }
   }
 
   // ================================================================ bubbles + ambient ripples
@@ -2011,6 +2659,8 @@
     const upper = rows[0].clone().lerp(rows[1], 0.5), Lu = 0.2126 * upper.x + 0.7152 * upper.y + 0.0722 * upper.z;
     asciiU.uOverlayCol.value.copy(Lu > 0.32 ? vec3('#143650') : vec3('#f4fbf7').lerp(vec3('#ffe9c8'), gold * 0.5));
     asciiU.uGlowCol.value.copy(Lu > 0.32 ? vec3('#ffffff') : vec3('#a9e4ff'));
+    asciiU.uOutlineCol.value.copy(Lu > 0.32 ? vec3('#eef7f8') : vec3('#0a1822'));      // the opposite of the timer's ink
+    document.documentElement.style.setProperty('--toutline', Lu > 0.32 ? '#eef7f8' : '#0a1822');
     { const c = asciiU.uOverlayCol.value; document.documentElement.style.setProperty('--tink', `rgb(${Math.round(c.x * 255)}, ${Math.round(c.y * 255)}, ${Math.round(c.z * 255)})`); }
     document.documentElement.style.setProperty('--tglow', Lu > 0.32 ? '#ffffff' : '#a9e4ff');
     // the coffee button follows the sky so it never feels stark
@@ -2025,6 +2675,7 @@
     root.setProperty('--chip', light ? 'rgba(255, 255, 255, 0.38)' : 'rgba(8, 14, 22, 0.42)');
     root.setProperty('--shadow', light ? 'none' : '0 1px 10px rgba(0,0,0,.3)');
     root.setProperty('--glow', light ? '#ffffff' : '#a9e4ff');
+    root.setProperty('--scrim', light ? 'rgba(244, 250, 252, 0.7)' : 'rgba(5, 12, 20, 0.6)');      // the backdrop behind the bottom controls
     {
       const card = rows[1].clone().lerp(vec3('#ffffff'), 0.2 * dayF).lerp(vec3('#000000'), 0.3 * (1 - dayF));
       const Lc = 0.2126 * card.x + 0.7152 * card.y + 0.0722 * card.z;
@@ -2286,10 +2937,12 @@
       ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
       // the digits: a band in the sky above the tank, sized to the grid (words go to real type when that option is on)
       const asType = state.wordsStyle !== 'dots';
-      const tmp = document.createElement('canvas'); tmp.width = B.bandW; tmp.height = B.bandH;
+      const pad = B.bandTop;      // room above the band, so tall letters (the dot on the i) aren't clipped
+      const tmp = document.createElement('canvas'); tmp.width = B.bandW; tmp.height = B.bandH + pad;
       digitDrop = Math.min(B.bandH * 0.09, 16 / grid.chCss);           // about 16px lower
-      drawTimer(tmp.getContext('2d'), B.bandW, B.bandH, grid.ch / grid.cw, null, asType && !/\d/.test(s.big) ? '' : s.big, false);
-      ctx.drawImage(tmp, B.bandX, B.bandTop);      // flipY on the texture means canvas top = screen top
+      const tc = tmp.getContext('2d'); tc.translate(0, pad);
+      drawTimer(tc, B.bandW, B.bandH, grid.ch / grid.cw, null, asType && !/\d/.test(s.big) ? '' : s.big, false);
+      ctx.drawImage(tmp, B.bandX, B.bandTop - pad);      // flipY on the texture means canvas top = screen top
       overlayTex.needsUpdate = true;
       const lc = lblCanvas.getContext('2d');
       lc.clearRect(0, 0, lblCanvas.width, lblCanvas.height);
@@ -2536,6 +3189,7 @@
 
   function rescape() {
     if (staticAnim || undoWhere === 'tank' || $('rescapeBtn').hidden) return;     // one tank change at a time
+    endFollow(false);
     const prev = { seed: state.seed, growth: state.growth, evap: state.evap, shape: state.shape };
     state.seed = randomSeed(); state.growth = 0; state.evap = 0;
     state.shape = Math.random() < 0.35 ? 'oval' : 'box';       // most tanks are rectangular; about 1 in 3 comes up oval
@@ -2661,6 +3315,7 @@
   function syncBrainUI() { document.body.classList.toggle('has-brain', !!state.brain); }
   function doneWithWork() {
     if (brain) return;
+    endFollow(false);
     hideUndo();
     if (state.timer.mode !== 'idle') withTimerDither(() => { timerReset(); });
     dayPeek = false;
@@ -2833,6 +3488,7 @@
   }
 
   $('rescapeBtn').onclick = rescape;
+  $('tankViewBtn').onclick = () => endFollow(false);
   $('tune').onclick = () => { const on = !$('drawer').classList.contains('on'); $('drawer').classList.toggle('on', on); $('tune').setAttribute('aria-expanded', on); $('tune').classList.toggle('on', on); };
   $('timerHit').onclick = timerPress;
   let hovering = false;
@@ -2959,7 +3615,7 @@
   function hitTest(cx, cy) {
     let best = null, bd = Infinity;
     for (const o of fishObjs) {
-      if (o.mode === 'intro' || o.mode === 'leap') continue;
+      if (o.mode === 'intro' || o.mode === 'leap' || o.mode === 'leap2') continue;
       const [sx, sy] = toScreen(o.p), r = Math.max(16, pxPerUnit(o.p) * o.f.size * 2.6), d = Math.hypot(sx - cx, sy - cy);
       if (d < r && d < bd) { bd = d; best = { fish: o }; }
     }
@@ -3017,7 +3673,28 @@
     }
     drag = null;
   };
-  const zoomMin = () => (camera.aspect < 0.8 ? 0.3 : 0.42);       // phones can pinch in close enough to see the detail
+  const zoomMin = () => CLOSE_DIST / baseDistance();      // as close as the follow camera's close-up
+  function startFollow(o, cine) {
+    if (!o) return;
+    if (!follow) follow = { back: state.zoomTarget };       // where to go back to afterwards
+    follow.o = o; follow.cine = !!cine; follow.swimAt = 0;
+    state.zoomTarget = zoomMin(); zoomRate = cine ? 1.4 : 2.2;
+    syncFollowUI();
+  }
+  function endFollow(slow) {
+    if (!follow) return;
+    state.zoomTarget = clamp(follow.back, zoomMin(), 1.3);
+    zoomRate = slow ? 0.55 : 2.2; homeRate = slow ? 0.035 : 0.15;
+    follow = null; syncFollowUI();
+  }
+  // "whole tank" in the dock while the camera follows a fish
+  function syncFollowUI() {
+    const b = document.getElementById('tankViewBtn'); if (!b) return;
+    const want = !!follow;
+    if (want === !b.hidden) return;
+    if (want) { b.hidden = false; if (!document.body.classList.contains('idle')) ditherEl(b, true, 220); }
+    else ditherEl(b, false, 220, () => { if (!follow) { b.hidden = true; setMask(b, null); } });
+  }
   const touchPts = new Map(); let pinch = null;
   const spread = () => { const [a, b] = [...touchPts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
   canvas.addEventListener('pointerdown', (ev) => {
@@ -3030,7 +3707,10 @@
   canvas.addEventListener('pointermove', (ev) => {
     if (!touchPts.has(ev.pointerId)) return;
     touchPts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-    if (pinch && touchPts.size >= 2) state.zoomTarget = clamp(pinch.z0 * pinch.d0 / spread(), zoomMin(), 1.3);     // fingers apart = closer
+    if (pinch && touchPts.size >= 2) {
+      zoomRate = 2.2; state.zoomTarget = clamp(pinch.z0 * pinch.d0 / spread(), zoomMin(), 1.3);     // fingers apart = closer
+      if (follow && state.zoomTarget > zoomMin() * 2.2) { const z = state.zoomTarget; endFollow(false); state.zoomTarget = z; }
+    }
   });
   const endTouch = (ev) => { touchPts.delete(ev.pointerId); if (touchPts.size < 2 && pinch) { pinch = null; setTimeout(() => { suppressClick = false; }, 250); } };
   canvas.addEventListener('pointerup', endTouch); canvas.addEventListener('pointercancel', endTouch);
@@ -3055,7 +3735,8 @@
     if (suppressClick) return;
     if (brainHit(ev.clientX, ev.clientY)) { pokeBrain(); return; }
     const h = hitTest(ev.clientX, ev.clientY);
-    if (h && h.fish) { pokeFish(h.fish); return; }
+    if (h && h.fish) { pokeFish(h.fish); startFollow(h.fish, false); return; }
+    if (follow) { endFollow(false); return; }                  // a click anywhere else goes back to the whole tank
     if (h && h.item) { h.item.anim = { t: 0 }; return; }
     const z = zoneAt(ev.clientX, ev.clientY);
     if (!z && baseHit(ev.clientX, ev.clientY)) { toggleBase(); return; }
@@ -3067,10 +3748,16 @@
       if (ray.ray.intersectPlane(new T.Plane(UP, -U.uWater.value), hit) && inside(hit.x, hit.z)) addRipple(hit.x, hit.z, 0.5, U.uTime.value);
     }
   });
-  window.addEventListener('wheel', (ev) => { if (ev.target === canvas || ev.target.id === 'timerHit') state.zoomTarget = clamp(state.zoomTarget * Math.exp(ev.deltaY * 0.0012), zoomMin(), 1.3); }, { passive: true });
+  window.addEventListener('wheel', (ev) => {
+    if (!(ev.target === canvas || ev.target.id === 'timerHit')) return;
+    zoomRate = 2.2;
+    state.zoomTarget = clamp(state.zoomTarget * Math.exp(ev.deltaY * 0.0012), zoomMin(), 1.3);
+    if (follow && state.zoomTarget > zoomMin() * 2.2) { const z = state.zoomTarget; endFollow(false); state.zoomTarget = z; }     // zooming well out lets go of the fish
+  }, { passive: true });
   window.addEventListener('keydown', (ev) => {
     if ((ev.target.tagName === 'INPUT' && ev.target.type === 'range') || ev.target.isContentEditable) return;
     if (/^[a-z]$/i.test(ev.key) && ev.key.toLowerCase() !== 'i') return;
+    if (ev.key === 'Escape' && follow) { endFollow(false); return; }
     if (ev.key === ' ' && !(ev.target.closest && ev.target.closest('button, a, input, select, textarea, [role="button"]'))) { ev.preventDefault(); timerPress(); }
     else if (ev.key === 'ArrowLeft') turn(-1);
     else if (ev.key === 'ArrowRight') turn(1);
@@ -3084,7 +3771,7 @@
   window.addEventListener('pointermove', () => { keyboardUser = false; }, { passive: true });
   const busy = () => overControls || about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging
     || (keyboardUser && !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.dock, .rdock, .undo-wrap, .drawer')));
-  const idleEls = () => [...document.querySelectorAll('.dock, .rdock, .undo-wrap, .tune')];
+  const idleEls = () => [...document.querySelectorAll('.dock, .rdock, .undo-wrap, .tune, .scrim')];
   function goIdle() {
     if (busy()) { idleTimer = setTimeout(goIdle, 1000); return; }
     idleEls().forEach((el) => ditherEl(el, false, 520));
@@ -3127,7 +3814,7 @@
   // ================================================================ loop
   const start = performance.now();
   const TURNS = 6;
-  let timeScale = 1, simClock = 0, wordsGlow = false;     // timeScale only changes in tests
+  let timeScale = 1, simClock = 0, wordsGlow = false, shadeReady = false;     // timeScale only changes in tests
   let lastRender = -1e9, lastSim = start, statTick = 0, lastCost = 0, lastSlow = 0;
   state.driftAmpTarget = 30;
   function renderFrame(now) {
@@ -3149,7 +3836,7 @@
     else state.driftPhase += dt * (Math.PI * 2 / 60);      // idle: one gentle back-and-forth a minute
     const azT = state.view + progress * TURNS * 360 + state.driftAmp * Math.sin(state.driftPhase);
     state.az += (azT - state.az) * (1 - Math.exp(-dt * (state.dragging ? 14 : 1.6)));
-    state.zoom += (state.zoomTarget - state.zoom) * (1 - Math.exp(-dt * 2.2));
+    state.zoom += (state.zoomTarget - state.zoom) * (1 - Math.exp(-dt * zoomRate));
     // growth + water ease toward their targets
     const g = state.growthPreview ?? state.growth, ev = state.growthPreview ?? state.evap;
     U.uGrowth.value += (growthU(g) - U.uGrowth.value) * (1 - Math.exp(-dt * 2.5));
@@ -3159,6 +3846,12 @@
     stepStatic(dtReal); stepTimerDither(dtReal);
     if (hazeMesh) hazeMesh.visible = U.uStatic.value > 0.002;
     U.uGlow.value += (glowTarget - U.uGlow.value) * (1 - Math.exp(-dt * 1.8));
+    {
+      const lit = glowTarget > 0 ? 1 : 0, sl = asciiU.uShadeLit;
+      if (glowTarget > 0) asciiU.uShadeAmt.value = glowTarget;
+      if (!shadeReady) { sl.value = lit; shadeReady = true; }
+      else sl.value += clamp(lit - sl.value, -dtReal / 0.9, dtReal / 0.9);         // ~0.9 s dither, like the rest of the app
+    }
     if (glowMesh) glowMesh.visible = U.uGlow.value > 0.01;
     U.uBaseHover.value += ((baseHover ? 1 : 0) - U.uBaseHover.value) * (1 - Math.exp(-dt * 8));
     if (state.wordsStyle !== 'dots') { const g = hovering || (waiting && Math.sin(t * 1.1) > 0); if (g !== wordsGlow) { wordsGlow = g; document.getElementById('words').classList.toggle('glow', g); } }
@@ -3169,6 +3862,22 @@
       applySky(skyDate()); updateSkyLabel(); tickTimer();
     }
     simulate(dt, t);
+    // follow camera. A new koi's entrance holds the close-up a moment after it starts swimming, then drifts back out.
+    if (follow && !fishObjs.includes(follow.o)) endFollow(false);
+    if (follow && follow.cine && follow.o.mode !== 'intro') { follow.swimAt = follow.swimAt || now; if (now - follow.swimAt > 2600) endFollow(true); }
+    {
+      const dist = baseDistance() * state.zoom, k = clamp((dist - CLOSE_DIST * 1.15) / (CLOSE_DIST * 2), 0, 1);
+      camEl += ((4 + 9 * k * k * (3 - 2 * k)) - camEl) * 0.12;          // close in, the camera comes down level with the fish
+      if (follow) {
+        const o = follow.o;
+        if (!(follow.cine && o.mode === 'intro' && !o.intro)) {         // a new koi: wait until it's placed in the sky
+          const want = o.p.clone();
+          if (want.y < U.uWater.value) want.y = Math.min(want.y, U.uWater.value - 1.2 - Math.sin(T.MathUtils.degToRad(camEl)) * dist);   // stay under the surface
+          target.lerp(want, follow.cine ? 0.3 : 0.2);
+        }
+      } else if (target.distanceToSquared(HOME_TARGET) > 1e-4) target.lerp(HOME_TARGET, homeRate);
+      else if (Math.abs(state.zoom - state.zoomTarget) < 0.005) { zoomRate = 2.2; homeRate = 0.15; }
+    }
     placeCamera();
     if (shake > 0.001) { const k = shake * 1.5; camera.position.x += Math.sin(t * 53) * k; camera.position.y += Math.sin(t * 41 + 1) * k * 0.8; shake *= Math.exp(-dt * 3.0); }
     musicTick(dtReal);
@@ -3208,6 +3917,21 @@
   document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { renderTimerText(true); drawCdLabel(); });
   wake();
 
+  // ---- fish lab hooks: the lab build (npm run lab) adds a panel that drives these
+  window.__ditherFishLab = {
+    cfg: FCFG, defaults: FCFG_DEFAULT, scenes: SCENES, varieties: FISH.map((f) => ({ name: f.name, gold: !!f.gold })),
+    fish: () => fishObjs.map((o, i) => ({ i, name: o.v.name, long: !!o.f.lf, puffy: !!o.f.pc, mode: o.mode })),
+    add(name, lf, pc) { state.fish.push(newFish(name || null, lf, pc)); syncFish(); save(); return fishObjs.length - 1; },
+    drop(name, lf, pc) { state.fish.push(newFish(name || null, lf, pc)); state.pendingFish = (state.pendingFish || 0) + 1; save(); revealFish(); return fishObjs.length - 1; },
+    clear() { endScene(); state.fish = []; state.pendingFish = 0; syncFish(); save(); endFollow(false); },
+    rebuild() { rebuildFish(); endFollow(false); },
+    jump(i) { const o = fishObjs[i]; if (o) pokeFish(o); },
+    scene(type) { return startScene(type); },
+    sceneNow: () => (scene2 ? scene2.type : ''),
+    follow(i) { if (i == null || i < 0 || !fishObjs[i]) endFollow(false); else { const z = state.zoomTarget; startFollow(fishObjs[i], false); state.zoomTarget = z; } },
+    zoom(z) { state.zoom = state.zoomTarget = z; },
+    slow(f) { timeScale = f; },
+  };
   window.dither = window.shoal = {
     state, completePom, timerPress, rescape, zoneAt, tankScreenBox, turn,
     foundScreen() { if (!found) return null; const p = found.root.position.clone().add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },

@@ -2,10 +2,11 @@
 
 A Pomodoro timer that lives in a tiny halftone aquarium. Finish a focus session, earn a fish.
 
-- **Focus for 25 minutes.** When it ends, click **rest up**: a goldfish or koi drops into the tank and splashes in. Fish reset at midnight.
+- **Focus for 25 minutes.** When it ends, click **rest up**: a koi drops in from the sky and dives into the tank, and the camera rides along in close-up before easing back out. Fish reset at midnight.
 - **The tank grows with you.** Each session moves it along: moss creeps, carpets fill in, stems reach out of the water, the water slowly evaporates.
 - **The sky is real.** It follows the sun and moon where you are. At night the base lights up (click the base to turn it off).
-- **Play with it.** Drag to turn the tank, click the fish, and keep an eye out for rare things on the sand.
+- **The koi feel alive.** Their bodies bend as they swim, long fins trail and ripple, eyes look around and blink, gills and mouths move as they breathe, and some have puffy cheeks. Every so often they play: a chase, circling each other, follow the leader, coming up to the surface, nibbling the bottom, nose to nose.
+- **Play with it.** Drag to turn the tank and keep an eye out for rare things on the sand. Click a koi and it jumps while the camera follows it up close; click anywhere else, press Esc, zoom out, or tap **whole tank** to come back. You can also scroll or pinch to zoom right in.
 - **New tank** rolls a fresh layout. Undo is there for 3 seconds.
 - **Music** loops under focus and rest, fading in and out with the timer. Volume and mute sit bottom right. If you come back to a session and the music is waiting (browsers need a tap before sound can play), a play button shows next to the volume.
 - **Keeps your screen on** while a session runs, so a phone propped on your desk doesn't dim and lock mid-focus. Paused or idle, it sleeps as usual.
@@ -26,6 +27,7 @@ The readable source lives in `source/`:
 cd source
 npm install
 npm run build      # writes ../index.html
+npm run lab        # writes ../../dither-fish-lab.html: the app plus a fish tuning panel (not deployed)
 ```
 
 ## Music

@@ -58,6 +58,11 @@
   .rdock { position: fixed; z-index: 4; right: calc(14px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px;
            height: calc(66px * var(--ui)); }      /* same height as the left dock, so both rows of buttons share a centerline */
   .dock { height: calc(66px * var(--ui)); }
+  /* a soft backdrop behind the bottom controls while they show, so they read over the tank up close */
+  .scrim { position: fixed; left: 0; right: 0; bottom: 0; height: calc(190px * var(--ui) + env(safe-area-inset-bottom)); z-index: 3; pointer-events: none;
+           background: linear-gradient(to top, var(--scrim, rgba(5,12,20,.6)) 0%, color-mix(in srgb, var(--scrim, rgba(5,12,20,.6)) 55%, transparent) 50%, transparent 100%); }
+  body.idle .scrim { visibility: hidden; }
+  @media (max-width: 640px) { .scrim { height: calc(300px + env(safe-area-inset-bottom)); } }
   body.idle .rdock { visibility: hidden; pointer-events: none; }
   .vol { display: flex; align-items: center; gap: 2px; }
   .vol .icon-btn { --s: calc(30px * var(--ui)); width: calc(48px * var(--ui)); height: calc(48px * var(--ui)); }
@@ -107,7 +112,7 @@
 
   /* ---------- undo: centered, level with the dock; fades away in 4 seconds */
   .undo-wrap { display: none; }      /* the undo button lives next to whatever it undoes */
-  .undo[hidden] { display: none; }
+  .undo[hidden], #tankViewBtn[hidden] { display: none; }
   .undo { transition: opacity 280ms ease; }
   .undo.leaving { opacity: 0; }
 
@@ -149,6 +154,7 @@
   .words .big { position: absolute; left: 0; right: 0; line-height: 1; }
   .words .lab { position: absolute; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 0.38em; line-height: 1; letter-spacing: 0.04em; }
   .words .play { width: 0.62em; height: 0.7em; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); flex: none; }
+  .words .big, .words .lab { -webkit-text-stroke: 0.08em var(--toutline, #eef7f8); paint-order: stroke fill; }
   .words.glow { text-shadow: 0 0 10px var(--tglow, #fff), 0 0 2px var(--tglow, #fff); }
   .words.glow .play { filter: drop-shadow(0 0 5px var(--tglow, #fff)); }
   .words.dim { opacity: 0.6; }
@@ -195,9 +201,11 @@
 <canvas id="c" aria-hidden="true"></canvas>
 <button id="timerHit" aria-label="Start a 25 minute focus session"></button>
 
+<div class="scrim" aria-hidden="true"></div>
 <div class="dock" role="toolbar" aria-label="Tank">
   <button class="icon-btn" id="aboutBtn" aria-label="About" aria-haspopup="dialog"><span class="ht-halo"></span><span class="ht-icon" data-icon="info"></span><span class="tip ht-text" aria-hidden="true">about</span></button>
   <button class="ghost" id="rescapeBtn"><span class="ht-halo"></span><span class="ht-icon" data-icon="refresh"></span><span class="ht-text">new tank</span></button>
+  <button class="ghost" id="tankViewBtn" hidden><span class="ht-halo"></span><span class="ht-icon" data-icon="back"></span><span class="ht-text">whole tank</span></button>
 </div>
 
 <div class="timer-actions" id="timerActions" hidden>
