@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.14
+  Dither — prototype 0.15
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -20,7 +20,7 @@
   const TANK = { w: 90, h: 26, d: 40 };            // long, low and shallow
   const MAX_POMS = 10;
   const FOCUS_MIN = 25, REST_MIN = 5;
-  const STORE_KEY = 'dither.v13';
+  const STORE_KEY = 'dither.v15';
   const APP = 'Dither';
   const FONT_MONO = '"Menlo", "SF Mono", "DejaVu Sans Mono", "Consolas", monospace';
   const FONT_UI = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -64,7 +64,7 @@
     [M.beak]:       [' .:-=+*>>>', '',      ['#7a3000', '#c85a10', '#ff8a2a', '#ffc080'], 0.5, 0],
     [M.beadA]:      [' .ooooOOO0', '',      ['#103a4a', '#1a6a8a', '#3aa8c8', '#9ae8ff'], 0.4, 0],
     [M.beadB]:      [' .ooooOOO0', '',      ['#5a1a30', '#a03050', '#e0607a', '#ffb0c0'], 0.4, 0],
-    [M.ticket]:     [' .:-=====#', '',      ['#4a0a0a', '#8a1a1a', '#d43030', '#ff8080'], 0.6, 0],
+    [M.ticket]:     [' .:-=+*#%@', '',      ['#861a46', '#d2306c', '#ff5f92', '#ff9abb'], 0.5, 0],     // (slot reused) the brain
     [M.usb]:        [' .:-=+*#%@', '',      ['#101a3a', '#203a7a', '#3a6ad0', '#9ab8ff'], 0.55, 0],
     [M.usbMetal]:   [' .:-=+*#%@', '',      ['#4a4a50', '#80808a', '#b8b8c4', '#f0f0f8'], 0.5, 0],
     [M.pebble]:     [' .:-=+*#%@', '',      ['#2a2a30', '#4a4a58', '#7a7a8a', '#b0b0c0'], 0.55, 0],
@@ -83,7 +83,7 @@
     [M.glassDark]:  [' .:-=+*#%@', '',      ['#081214', '#14262a', '#2a484e', '#5d8b93'], 0.5, 0],
     [M.paper]:      [' .:-=+*#%@', '',      ['#77776f', '#b8b8ae', '#e9e8df', '#ffffff'], 0.5, 0],
     [M.shellPink]:  [' .:-=+*#%@', '',      ['#6a3836', '#b26a62', '#ee9e90', '#ffd6cb'], 0.5, 0],
-    [M.floppy]:     [' .:-=+*#%@', '',      ['#16223c', '#2b4676', '#476fb4', '#8db0e8'], 0.5, 0],
+    [M.floppy]:     [' .:-=+*#%@', '',      ['#3e0c22', '#7c2240', '#b23e62', '#de6a8a'], 0.5, 0],     // (slot reused) the brain's folds
     [M.masonBrass]: [' .:-=+*#%@', '',      ['#5a400e', '#a47c1c', '#ecbd3c', '#fff2b0'], 0.5, 0],
     [M.cdFace]:     [' .:-=+*#%@', '',      ['#7b8088', '#b8bdc6', '#e6e9ee', '#ffffff'], 0.5, 0],
     [M.cdInk]:      [' .:-=+*#%@', '',      ['#0e1a2e', '#1d3152', '#2c4a78', '#46689e'], 0.5, 0],
@@ -141,7 +141,7 @@
 
   // ================================================================ state + persistence
   const today = () => new Date().toDateString();
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v12') || localStorage.getItem('dither.v11') || localStorage.getItem('dither.v09') || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v13') || localStorage.getItem('dither.v12') || localStorage.getItem('dither.v11') || localStorage.getItem('dither.v09') || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
   const state = {
     seed: saved.seed || '',
     shape: SHAPES[saved.shape] ? saved.shape : 'box',
@@ -150,7 +150,10 @@
     underlit: false,
     name: 'Dither',          // fixed now; no renaming
     wordsStyle: ['dots', 'geist', 'doto'].includes(saved.wordsStyle) ? saved.wordsStyle : 'dots',
-    baseOn: saved.baseOn === true,             // off by default; a click on the base turns it on
+    baseOn: saved.baseOn === true,
+    brain: saved.brain === true,              // 'done with work' leaves a brain floating until the next focus
+    musicVol: typeof saved.musicVol === 'number' ? saved.musicVol : 0.6,
+    musicMuted: saved.musicMuted === true,             // off by default; a click on the base turns it on
     sound: saved.sound ?? true,
     growth: saved.growth ?? 0,
     evap: saved.evap ?? 0,
@@ -169,7 +172,7 @@
         localStorage.setItem(STORE_KEY, JSON.stringify({
           seed: state.seed, shape: state.shape, name: state.name, sound: state.sound,
           growth: state.growth, evap: state.evap, fish: state.fish, pendingFish: state.pendingFish, fishDay: state.fishDay, timer: state.timer,
-          wordsStyle: state.wordsStyle, baseOn: state.baseOn,
+          wordsStyle: state.wordsStyle, baseOn: state.baseOn, brain: state.brain, musicVol: state.musicVol, musicMuted: state.musicMuted,
         }));
       } catch (e) { /* storage blocked: still works, just won't remember */ }
     }, 300);
@@ -1311,6 +1314,7 @@
     }
     world.add(dynPoints); world.add(fishGroup); world.add(itemGroup);
     world.add(makeHaze());
+    world.add(propGroup);
     placeFound(foundType, mulberry32(foundSeed));
     bubbles.length = 0;
     // tank bounds for edge taps
@@ -1818,7 +1822,7 @@
   }
 
   // ================================================================ bubbles + ambient ripples
-  const MAX_DYN = 460;
+  const MAX_DYN = 3200;
   const dynGeo = (() => {
     const b = new Builder();
     for (let i = 0; i < MAX_DYN; i++) b.v(V(0, -999, 0), UP, M.bubble, 0, 0, null, 0.5);
@@ -1835,6 +1839,7 @@
   function addRipple(x, z, strength, t) { U.uRip.value[rippleSlot].set(x, z, t, strength); rippleSlot = (rippleSlot + 1) % 8; }
 
   function simulate(dt, t) {
+    updateBrain(dt, t);
     const water = U.uWater.value;
     // the water breathes: soft rings from random spots, no drips
     nextBreath -= dt;
@@ -2045,6 +2050,8 @@
   const fmt2 = (sec) => { sec = Math.ceil(sec); return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`; };
   function startPhase(kind) {
     const mins = kind === 'focus' ? FOCUS_MIN : REST_MIN;
+    if (kind === 'focus') brainLeave();
+    music.fresh[kind] = true;
     state.timer = { mode: `${kind}-run`, endsAt: Date.now() + mins * 60000, remaining: mins * 60 };
   }
   function timerPress() {
@@ -2054,7 +2061,7 @@
     else if (tm.mode === 'focus-done') { startPhase('rest'); revealFish(); }
     else if (tm.mode.endsWith('-run')) { tm.remaining = remaining(); tm.mode = tm.mode.replace('-run', '-pause'); }
     else { tm.endsAt = Date.now() + tm.remaining * 1000; tm.mode = tm.mode.replace('-pause', '-run'); }
-    save(); renderTimerText(true); announce();
+    save(); renderTimerText(true); announce(); primeMusic();
   }
   function timerReset() { state.timer = { mode: 'idle', endsAt: 0, remaining: FOCUS_MIN * 60 }; while (state.pendingFish > 0) revealFish(); save(); renderTimerText(true); announce(); }
   // paused: a trash icon under the timer. It dithers the timer away to the start screen; undo brings it back
@@ -2068,7 +2075,7 @@
     const top = Math.round(oy + (band.bandTop + band.bandH) * grid.chCss + 4);
     if (top !== box._top) { box._top = top; box.style.top = `${top}px`; }
   }
-  function trashTimer() {
+  function resetTimerUndoable() {
     if (!state.timer.mode.endsWith('-pause')) return;
     const prev = JSON.parse(JSON.stringify(state.timer));
     withTimerDither(() => { timerReset(); }, () => showUndo(() => withTimerDither(() => { state.timer = prev; save(); renderTimerText(true); announce(); })));
@@ -2344,6 +2351,9 @@
     coffee: '<path d="M4.5 10.5h12v4a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M16.5 12h1.2a2.4 2.4 0 0 1 0 4.8h-1.6"/><path d="M8 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M11 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M14 2.8c-1 1.1 1 2.2 0 3.6"/>',
     close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
     undo: '<path d="M3.8 12.5a8.2 8.2 0 1 0 2.6-6.4"/><path d="M3.6 3.6v5.2h5.2"/>',
+    vol: '<path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/>',
+    mute: '<path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+    brain: '<path d="M12 5.6c-1.1-1.8-4.4-1.8-5.3.4-2 .1-3.1 2.2-2.2 3.9-1.6 1-1.5 3.6.3 4.4-.3 2 1.7 3.5 3.5 2.8.8 1.6 2.9 1.7 3.7.2"/><path d="M12 5.6c1.1-1.8 4.4-1.8 5.3.4 2 .1 3.1 2.2 2.2 3.9 1.6 1 1.5 3.6-.3 4.4.3 2-1.7 3.5-3.5 2.8-.8 1.6-2.9 1.7-3.7.2"/><path d="M12 5.6v11.8"/><path d="M8.2 9.6c1 .2 1.6.9 1.6 1.9M15.8 9.6c-1 .2-1.6.9-1.6 1.9"/>',
     trash: '<path d="M4 7h16"/><path d="M9.5 7V4.6h5V7"/><path d="M6.4 7l1 12.1a1.7 1.7 0 0 0 1.7 1.5h5.8a1.7 1.7 0 0 0 1.7-1.5L17.6 7"/><path d="M10.2 10.6v6.4M13.8 10.6v6.4"/>',
     dice: '<g transform="rotate(-14 7.2 14.6)"><rect x="1.8" y="9.2" width="10.8" height="10.8" rx="2.4"/><circle cx="4.9" cy="12.3" r="1.05" fill="#000" stroke="none"/><circle cx="7.2" cy="14.6" r="1.05" fill="#000" stroke="none"/><circle cx="9.5" cy="16.9" r="1.05" fill="#000" stroke="none"/></g><g transform="rotate(12 16.6 8)"><rect x="11.2" y="2.6" width="10.8" height="10.8" rx="2.4"/><circle cx="14.3" cy="5.7" r="1.05" fill="#000" stroke="none"/><circle cx="18.9" cy="5.7" r="1.05" fill="#000" stroke="none"/><circle cx="14.3" cy="10.3" r="1.05" fill="#000" stroke="none"/><circle cx="18.9" cy="10.3" r="1.05" fill="#000" stroke="none"/></g>',
   };
@@ -2361,13 +2371,14 @@
   const pill = $('undoPill');
   function showUndo(fn) {
     if (fn) { undoFn = fn; wake(); }      // undo always arrives with the controls showing
-    pill.hidden = false; ditherEl(pill, false, 4000);
-    clearTimeout(undoTimer); undoTimer = setTimeout(hideUndo, 4000);
+    pill.hidden = false; pill.classList.remove('leaving');
+    clearTimeout(undoTimer); clearTimeout(pill._fade);
+    pill._fade = setTimeout(() => pill.classList.add('leaving'), 3700); undoTimer = setTimeout(hideUndo, 4000);
   }
-  function hideUndo() { pill.hidden = true; stopDither(pill); undoFn = null; clearTimeout(undoTimer); }
-  pill.addEventListener('mouseenter', () => { stopDither(pill); clearTimeout(undoTimer); });
+  function hideUndo() { pill.hidden = true; pill.classList.remove('leaving'); undoFn = null; clearTimeout(undoTimer); clearTimeout(pill._fade); }
+  pill.addEventListener('mouseenter', () => { pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); });
   pill.addEventListener('mouseleave', () => { if (undoFn) showUndo(); });
-  pill.addEventListener('focus', () => { stopDither(pill); clearTimeout(undoTimer); });
+  pill.addEventListener('focus', () => { pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); });
   pill.addEventListener('blur', () => { if (undoFn) showUndo(); });
   pill.onclick = () => { if (!undoFn) return; const f = undoFn; hideUndo(); f(); };
   function placeUndo() {
@@ -2413,6 +2424,200 @@
     withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); },
       () => showUndo(() => withStatic(() => { Object.assign(state, prev); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); })));      // undo's 4 seconds start once the new tank has filled in
   }
+  // ================================================================ "done with work": the big brain
+  // It falls in from above the screen, plops, then floats and bobs until the next focus session, when it dithers away.
+  const propGroup = new T.Group();
+  const BRAIN_SCALE = 17;
+  let brain = null, brainGeo = null, shake = 0, waterBoost = 0;
+  const brainUniforms = Object.assign({}, U, { uTrans: { value: new T.Vector3(0, 0, 0) } });   // its own dither, so it can leave on its own
+  const brainMat = new T.ShaderMaterial({ uniforms: brainUniforms, vertexShader: SCENE_VERT, fragmentShader: SCENE_FRAG, side: T.DoubleSide });
+  function brainGeometry() {
+    const g = new T.IcosahedronGeometry(1, 16);
+    const P = g.attributes.position, p = new T.Vector3();
+    const noise = makeNoise(mulberry32(41));
+    const n3 = (x, y, z) => (noise(x + z * 0.7 + 3, y + 1) + noise(y * 1.1 + 11, z + x * 0.3 + 5) + noise(z * 0.9 + 7, x * 0.8 - y * 0.4 + 2)) / 3;
+    const fold = (d) => Math.abs(Math.sin(n3(d.x * 2.3, d.y * 2.3, d.z * 2.3) * 13));
+    const fiss = (d) => Math.exp(-Math.pow(d.x / 0.09, 2)) * smooth(-0.45, 0.1, d.y);
+    const depth = [];
+    for (let i = 0; i < P.count; i++) {
+      p.fromBufferAttribute(P, i).normalize();
+      const groove = 1 - smooth(0.0, 0.5, fold(p));
+      const r = 1 - 0.11 * groove - 0.22 * fiss(p);
+      const y = p.y < -0.3 ? -0.3 + (p.y + 0.3) * 0.5 : p.y;
+      P.setXYZ(i, p.x * r * 0.9, y * r * 0.78, p.z * r * 1.16);
+      depth.push(Math.max(groove, fiss(p)));
+    }
+    g.computeVertexNormals();
+    const b = new Builder(), N = g.attributes.normal, n = new T.Vector3(), L = V(0.35, 0.85, 0.4).normalize();
+    for (let i = 0; i < P.count; i++) {
+      p.fromBufferAttribute(P, i); n.fromBufferAttribute(N, i);
+      const lit = 0.3 + 0.65 * Math.max(0, n.dot(L));
+      b.v(p.clone(), n.clone(), M.ticket, 0, 0, null, Math.max(0.05, lit * (1 - 0.55 * depth[i])), 0);
+    }
+    const c = new T.IcosahedronGeometry(1, 9), C = c.attributes.position;
+    for (let i = 0; i < C.count; i++) {
+      p.fromBufferAttribute(C, i).normalize();
+      const rib = Math.abs(Math.sin(p.y * 9 + p.z * 1.5));
+      const r = 1 - 0.09 * (1 - smooth(0, 0.5, rib));
+      C.setXYZ(i, p.x * r * 0.5, -0.42 + p.y * r * 0.27, -0.78 + p.z * r * 0.36);
+    }
+    c.computeVertexNormals();
+    const CN = c.attributes.normal;
+    for (let i = 0; i < C.count; i++) {
+      p.fromBufferAttribute(C, i); n.fromBufferAttribute(CN, i);
+      const rib = Math.abs(Math.sin(((p.y + 0.42) / 0.27) * 9));
+      const lit = 0.26 + 0.6 * Math.max(0, n.dot(L));
+      b.v(p.clone(), n.clone(), M.ticket, 0, 0, null, Math.max(0.05, lit * (0.55 + 0.45 * smooth(0, 0.5, rib))), 0);
+    }
+    return b.build();
+  }
+
+  function makeBrain(falling) {
+    if (!brainGeo) brainGeo = brainGeometry();
+    if (brain) propGroup.remove(brain.mesh);
+    const mesh = new T.Mesh(brainGeo, brainMat); mesh.frustumCulled = false; mesh.rotation.order = 'YXZ'; mesh.scale.setScalar(BRAIN_SCALE);
+    const pos = pullInside(V(0, 0, 0), 0.75);
+    const yaw = T.MathUtils.degToRad(state.az) + Math.PI / 2;     // side-on to you: the classic brain silhouette
+    if (falling) { camera.updateMatrixWorld(); for (pos.y = U.uWater.value + 6; pos.y < 600; pos.y += 2) if (toScreen(V(pos.x, pos.y - BRAIN_SCALE * 0.9, pos.z))[1] < -40) break; }
+    else pos.y = U.uWater.value - BRAIN_SCALE * 0.43;
+    brain = { mesh, pos, vel: V(0, falling ? -34 : 0, 0), g: 78,
+              rot: falling ? V(Math.random() * 6, Math.random() * 6, Math.random() * 6) : V(0, yaw, 0),
+              spin: falling ? V((Math.random() - 0.5) * 1.3, 1.3 * (Math.random() < 0.5 ? -1 : 1), (Math.random() - 0.5) * 1.3) : V(0, 0, 0),
+              phase: falling ? 'fall' : 'float', tau: falling ? 0 : 10, leave: 0 };
+    if (!falling) waterBoost = 2.0;
+    propGroup.add(mesh);
+  }
+  function updateBrain(dt, t) {
+    const water = U.uWater.value;
+    if (!brain) { waterBoost += (0 - waterBoost) * (1 - Math.exp(-dt * 1.5)); if (waterBoost < 0.01) waterBoost = 0; return; }
+    const b = brain;
+    let sx = 1, sy = 1, rockX = 0, rockZ = 0;
+    if (b.phase === 'leaving') {
+      b.leave = Math.min(1, b.leave + dt / 1.3);
+      brainUniforms.uTrans.value.set(2, 0.5 - 0.5 * Math.cos(Math.PI * b.leave), 0);
+      waterBoost = 2.0 * (1 - b.leave);
+      if (b.leave >= 1) { propGroup.remove(b.mesh); brain = null; brainUniforms.uTrans.value.set(0, 0, 0); state.brain = false; save(); syncBrainUI(); return; }
+    } else brainUniforms.uTrans.value.copy(U.uTrans.value);     // otherwise it dithers along with "new tank"
+    if (b.phase === 'fall') {
+      b.vel.y -= b.g * dt; b.pos.addScaledVector(b.vel, dt); b.rot.addScaledVector(b.spin, dt);
+      if (Math.random() < 0.6) sparkle(b.pos.x, b.pos.y + 0.62 * BRAIN_SCALE + 0.5, b.pos.z, 2, 5);
+      if (b.pos.y - 0.62 * BRAIN_SCALE <= water) {
+        b.phase = 'float'; b.tau = 0;
+        const x = b.pos.x, z = b.pos.z;
+        addRipple(x, z, 6, t); addRipple(x, z, 4.5, t + 0.25); addRipple(x, z, 3, t + 0.6);
+        [[14, 0], [-14, 0], [0, 10], [0, -10]].forEach(([dx, dz], k) => addRipple(x + dx, z + dz, 2.2, t + 0.15 + k * 0.05));
+        splash(x, water, z, 820, 4.6);
+        const R0 = BRAIN_SCALE * 0.55;
+        for (let k = 0; k < 260; k++) { const a = Math.random() * 6.28, sp = 5 + Math.random() * 7; splashes.push({ x: x + Math.cos(a) * R0, y: water + 0.3, z: z + Math.sin(a) * R0 * 0.8, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: 18 + Math.random() * 14 }); }
+        for (let k = 0; k < 220; k++) bubbles.push({ x: x + (Math.random() - 0.5) * 24, z: z + (Math.random() - 0.5) * 18, y: water - 1 - Math.random() * 14, vy: 1.5 + Math.random() * 3.5, size: 0.3 + Math.random() * 0.8, ph: Math.random() * 6 });
+        shake = 1.6;
+        for (const o of fishObjs) if (o.mode === 'swim') startCelebration(o, water);
+        b.vel.multiplyScalar(0.22);
+      }
+    } else {
+      // floating: it plunges, springs back up past the line, then settles into a slow bob and a gentle rock
+      b.tau += dt;
+      const eq = water - BRAIN_SCALE * 0.43 + Math.sin(t * 1.15) * 0.4 + Math.sin(t * 0.53 + 1) * 0.25;
+      b.vel.y += ((eq - b.pos.y) * 6.5 - b.vel.y * 1.15) * dt;
+      b.pos.y += b.vel.y * dt;
+      b.spin.multiplyScalar(Math.exp(-dt * 1.6));
+      b.rot.y += b.spin.y * dt;
+      const want = T.MathUtils.degToRad(state.az) + Math.PI / 2;
+      const d = ((want - b.rot.y) % Math.PI + Math.PI * 1.5) % Math.PI - Math.PI / 2;
+      b.rot.y += d * (1 - Math.exp(-dt * 1.2));
+      const settle = 1 - Math.exp(-dt * 2.2);
+      b.rot.x += (Math.round(b.rot.x / (Math.PI * 2)) * Math.PI * 2 - b.rot.x) * settle;
+      b.rot.z += (Math.round(b.rot.z / (Math.PI * 2)) * Math.PI * 2 - b.rot.z) * settle;
+      const wob = Math.exp(-b.tau * 4.5) * Math.cos(b.tau * 15);          // jelly squash on impact
+      sx = 1 + 0.12 * wob; sy = 1 - 0.22 * wob;
+      rockX = Math.sin(t * 0.9) * 0.05 - b.vel.y * 0.006; rockZ = Math.sin(t * 0.7 + 2) * 0.06;
+      if (b.phase === 'float') waterBoost = 2.0 + 1.8 * Math.exp(-b.tau * 1.6) * Math.cos(b.tau * 5.2);   // surge, then a slosh
+    }
+    b.mesh.position.copy(b.pos); b.mesh.rotation.set(b.rot.x + rockX, b.rot.y, b.rot.z + rockZ);
+    b.mesh.scale.set(BRAIN_SCALE * sx, BRAIN_SCALE * sy, BRAIN_SCALE * sx);
+  }
+  function brainLeave() { if (brain && brain.phase !== 'leaving') { brain.phase = 'leaving'; brain.leave = 0; } }
+  function pokeBrain() { if (!brain || brain.phase !== 'float') return; brain.vel.y -= 9; addRipple(brain.pos.x, brain.pos.z, 1.6, U.uTime.value); splash(brain.pos.x, U.uWater.value, brain.pos.z, 60, 1.6); }
+  function syncBrainUI() { document.body.classList.toggle('has-brain', !!state.brain); }
+  function doneWithWork() {
+    if (brain) return;
+    hideUndo();
+    if (state.timer.mode !== 'idle') withTimerDither(() => { timerReset(); });
+    makeBrain(true); state.brain = true; save(); syncBrainUI();
+    $('live').textContent = 'Done with work. Enjoy the rest of your day.';
+  }
+
+  // ================================================================ music: lofi under focus and rest
+  // Each loops while its timer runs, fades in when it starts, fades out over the last few seconds and when paused.
+  // On the web it's decoded into memory and looped sample-accurately (MP3s gap when an <audio> element loops);
+  // opened straight from a file, it falls back to a plain <audio> element.
+  const TRACKS = { focus: 'audio/lofi-loop.mp3', rest: 'audio/lofi-relaxing.mp3' };
+  const music = { el: {}, gain: {}, buf: {}, loading: {}, src: {}, t0: {}, offset: { focus: 0, rest: 0 }, level: { focus: 0, rest: 0 },
+                  startedAt: {}, fresh: {}, last: null, wantGesture: false, playing: { focus: false, rest: false } };
+  const useGraph = /^https?:$/.test(location.protocol) && !!(window.AudioContext || window.webkitAudioContext);
+  function loadBuffer(k) {
+    if (music.buf[k] || music.loading[k]) return;
+    const ctx = audio(); if (!ctx) return;
+    music.loading[k] = fetch(TRACKS[k]).then((r) => r.arrayBuffer()).then((ab) => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej))).then((buf) => {
+      // find where the sound actually starts and ends: MP3 encoders pad both ends with silence, which would click the loop
+      const d = buf.getChannelData(0), eps = 1e-4; let a = 0, b = d.length - 1;
+      while (a < 8192 && Math.abs(d[a]) < eps) a++;
+      while (b > d.length - 8192 && Math.abs(d[b]) < eps) b--;
+      music.buf[k] = { buf, start: a / buf.sampleRate, end: (b + 1) / buf.sampleRate };
+      if (music.playing[k]) startSource(k);
+    }).catch(() => { music.loading[k] = null; });
+  }
+  function gainFor(k) {
+    const ctx = audio(); if (!ctx) return null;
+    if (!music.gain[k]) { const g = ctx.createGain(); g.gain.value = 0; g.connect(ctx.destination); music.gain[k] = g; }
+    return music.gain[k];
+  }
+  function startSource(k) {
+    const ctx = audio(), B = music.buf[k]; if (!ctx || !B || music.src[k]) return;
+    const src = ctx.createBufferSource(); src.buffer = B.buf; src.loop = true; src.loopStart = B.start; src.loopEnd = B.end;
+    src.connect(gainFor(k));
+    const off = B.start + (music.offset[k] % (B.end - B.start));
+    src.start(0, off); music.src[k] = src; music.t0[k] = ctx.currentTime - (off - B.start);
+  }
+  function stopSource(k) {
+    const ctx = audio(), B = music.buf[k], src = music.src[k]; if (!src) return;
+    if (ctx && B) music.offset[k] = (ctx.currentTime - music.t0[k]) % (B.end - B.start);
+    try { src.stop(); } catch (e) { /* already stopped */ }
+    music.src[k] = null;
+  }
+  function musicEl(k) { if (!music.el[k]) { const a = new Audio(TRACKS[k]); a.loop = true; a.preload = 'auto'; music.el[k] = a; } return music.el[k]; }
+  function playMusic(k) {
+    music.playing[k] = true;
+    if (useGraph) { if (music.fresh[k]) music.offset[k] = 0; loadBuffer(k); startSource(k); return; }
+    const el = musicEl(k); if (music.fresh[k]) el.currentTime = 0;
+    if (el.paused) el.play().then(() => { music.wantGesture = false; }).catch(() => { music.wantGesture = true; });
+  }
+  function pauseMusic(k) { music.playing[k] = false; if (useGraph) stopSource(k); else if (music.el[k] && !music.el[k].paused) music.el[k].pause(); }
+  function setLevel(k, v) { if (useGraph) { if (music.gain[k]) music.gain[k].gain.value = v; } else if (music.el[k]) music.el[k].volume = clamp(v, 0, 1); }
+  function primeMusic() {                    // called inside a click, so browsers allow the sound to start
+    audio();
+    const m = state.timer.mode, k = m === 'focus-run' ? 'focus' : m === 'rest-run' ? 'rest' : null;
+    if (k && !music.playing[k]) playMusic(k);
+  }
+  function musicTick(dt) {
+    const m = state.timer.mode, k = m === 'focus-run' ? 'focus' : m === 'rest-run' ? 'rest' : null;
+    if (k !== music.last) { if (k) music.startedAt[k] = performance.now(); music.last = k; }
+    for (const kk of ['focus', 'rest']) {
+      let target = 0;
+      if (kk === k && !state.musicMuted) {
+        const fin = clamp((performance.now() - (music.startedAt[kk] || 0)) / ((music.fresh[kk] ? 2.5 : 1.0) * 1000), 0, 1);
+        target = state.musicVol * fin * clamp(remaining() / 4, 0, 1);      // in over a couple of seconds, gone by 0:00
+      }
+      if (target > 0.001 && !music.playing[kk] && !music.wantGesture) playMusic(kk);
+      music.level[kk] += (target - music.level[kk]) * (1 - Math.exp(-dt * (target > music.level[kk] ? 10 : 6)));
+      setLevel(kk, Math.pow(music.level[kk], 1.6));                         // curved so the slider feels even
+      if (target === 0 && music.level[kk] < 0.004 && music.playing[kk]) { pauseMusic(kk); music.level[kk] = 0; }
+      if (target > 0 && music.fresh[kk] && music.level[kk] > target * 0.95) music.fresh[kk] = false;
+    }
+  }
+  // if a session is already running when the page opens, the music starts on the first tap anywhere
+  window.addEventListener('pointerdown', () => { if (music.wantGesture) { music.wantGesture = false; primeMusic(); } }, true);
+
   // the haze shell: the tank's own outline, a hair outside the glass, from under the base to above the rim
   const HAZE_VERT = /* glsl */`void main() { gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); }`;
   const HAZE_FRAG = /* glsl */`
@@ -2482,7 +2687,20 @@
   ['mouseenter', 'focus'].forEach((ev) => $('timerHit').addEventListener(ev, () => { hovering = true; }));
   ['mouseleave', 'blur'].forEach((ev) => $('timerHit').addEventListener(ev, () => { hovering = false; }));
 
-  $('trashBtn').onclick = trashTimer;
+  $('resetBtn').onclick = resetTimerUndoable;
+  const volBtn = $('volBtn'), volSlider = $('volSlider');
+  function setIcon(el, name) { el.style.setProperty('--m', svgURL(ICONS[name])); const h = el.parentElement.querySelector('.ht-halo'); if (h) h.style.setProperty('--mb', svgURL(ICONS[name], true)); }
+  function syncVolUI() {
+    const off = state.musicMuted || state.musicVol <= 0.001;
+    setIcon(volBtn.querySelector('.ht-icon'), off ? 'mute' : 'vol');
+    volBtn.setAttribute('aria-label', off ? 'Unmute music' : 'Mute music'); volBtn.setAttribute('aria-pressed', String(off));
+    volBtn.querySelector('.tip').textContent = off ? 'unmute' : 'mute';
+    volSlider.value = String(state.musicMuted ? 0 : state.musicVol);
+  }
+  volBtn.onclick = () => { if (state.musicMuted || state.musicVol <= 0.001) { state.musicMuted = false; if (state.musicVol <= 0.001) state.musicVol = 0.5; } else state.musicMuted = true; save(); syncVolUI(); primeMusic(); };
+  volSlider.oninput = () => { state.musicVol = +volSlider.value; state.musicMuted = state.musicVol <= 0.001; save(); syncVolUI(); primeMusic(); };
+  syncVolUI();
+  $('doneBtn').onclick = doneWithWork;
   $('addPom').onclick = () => { completePom(false); revealFish(); };
   // testing: jump to 3 seconds before the end of whichever phase is next
   $('endSoon').onclick = () => {
@@ -2674,8 +2892,14 @@
     canvas.className = z === 'l' ? 'edge-l' : z === 'r' ? 'edge-r' : z ? 'grab' : '';
   });
   canvas.addEventListener('mouseleave', () => { baseHover = false; });
+  function brainHit(cx, cy) {
+    if (!brain || brain.phase !== 'float') return false;
+    const [sx, sy] = toScreen(brain.pos.clone().setY(brain.pos.y + BRAIN_SCALE * 0.2)), r = pxPerUnit(brain.pos) * BRAIN_SCALE * 0.8;
+    return Math.hypot(sx - cx, sy - cy) < r;
+  }
   canvas.addEventListener('click', (ev) => {
     if (suppressClick) return;
+    if (brainHit(ev.clientX, ev.clientY)) { pokeBrain(); return; }
     const h = hitTest(ev.clientX, ev.clientY);
     if (h && h.fish) { pokeFish(h.fish); return; }
     if (h && h.item) { h.item.anim = { t: 0 }; return; }
@@ -2705,8 +2929,8 @@
   window.addEventListener('keydown', (ev) => { if (ev.key === 'Tab' || ev.key.startsWith('Arrow')) keyboardUser = true; }, true);
   window.addEventListener('pointermove', () => { keyboardUser = false; }, { passive: true });
   const busy = () => overControls || about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging
-    || (keyboardUser && !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.dock, .undo-wrap, .drawer')));
-  const idleEls = () => [...document.querySelectorAll('.dock, .undo-wrap, .tune')];
+    || (keyboardUser && !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.dock, .rdock, .undo-wrap, .drawer')));
+  const idleEls = () => [...document.querySelectorAll('.dock, .rdock, .undo-wrap, .tune')];
   function goIdle() {
     if (busy()) { idleTimer = setTimeout(goIdle, 1000); return; }
     idleEls().forEach((el) => ditherEl(el, false, 520));
@@ -2721,7 +2945,7 @@
     clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, IDLE_MS);
   }
   ['mousemove', 'mousedown', 'focusin', 'touchstart', 'wheel', 'keydown'].forEach((ev) => window.addEventListener(ev, wake, { passive: true }));
-  document.querySelectorAll('.dock, .undo-wrap, .tune, .drawer').forEach((el) => { el.addEventListener('mouseenter', () => { overControls = true; }); el.addEventListener('mouseleave', () => { overControls = false; }); });
+  document.querySelectorAll('.dock, .rdock, .undo-wrap, .tune, .drawer').forEach((el) => { el.addEventListener('mouseenter', () => { overControls = true; }); el.addEventListener('mouseleave', () => { overControls = false; }); });
   document.documentElement.addEventListener('mouseleave', () => { overControls = false; clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, 1200); });   // pointer left the window
   // admin view: type the word anywhere (not in a field)
   let typed = '';
@@ -2756,7 +2980,7 @@
     // growth + water ease toward their targets
     const g = state.growthPreview ?? state.growth, ev = state.growthPreview ?? state.evap;
     U.uGrowth.value += (growthU(g) - U.uGrowth.value) * (1 - Math.exp(-dt * 2.5));
-    U.uWater.value += (TANK.h * (0.955 - 0.012 * clamp(ev, 0, MAX_POMS)) - U.uWater.value) * (1 - Math.exp(-dt * 1.2));
+    U.uWater.value += (TANK.h * (0.955 - 0.012 * clamp(ev, 0, MAX_POMS)) + waterBoost - U.uWater.value) * (1 - Math.exp(-dt * (waterBoost > 0 ? 6 : 1.2)));
     const glowT = hovering ? 1 : waiting ? 0.25 + 0.25 * Math.sin(t * 1.1) : 0;
     asciiU.uOverlayGlow.value += (glowT - asciiU.uOverlayGlow.value) * (1 - Math.exp(-dt * 5));
     stepStatic(dtReal); stepTimerDither(dtReal);
@@ -2773,6 +2997,8 @@
     }
     simulate(dt, t);
     placeCamera();
+    if (shake > 0.001) { const k = shake * 1.5; camera.position.x += Math.sin(t * 53) * k; camera.position.y += Math.sin(t * 41 + 1) * k * 0.8; shake *= Math.exp(-dt * 3.0); }
+    musicTick(dtReal);
     const azr = T.MathUtils.degToRad(state.az), dz = (terrain ? shape.b : 20) * 0.28;
     digitMesh.position.x = Math.sin(azr) * dz; digitMesh.position.z = Math.cos(azr) * dz; digitMesh.rotation.y = azr;
     world.updateMatrixWorld();
@@ -2801,6 +3027,8 @@
   U.uWater.value = TANK.h * (0.955 - 0.012 * state.evap);
   applySky(new Date());
   generate(state.seed);
+  if (state.brain) makeBrain(false);
+  syncBrainUI();
   save(); updateDrawer(); updateSkyLabel();
   const go = () => { renderTimerText(true); drawCdLabel(); requestAnimationFrame(loop); };
   (document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
@@ -2812,6 +3040,8 @@
     foundScreen() { if (!found) return null; const p = found.root.position.clone().add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
     setZoom(z) { state.zoom = state.zoomTarget = z; },
     slow(f) { timeScale = f; },
+    doneWithWork, brainInfo() { return brain ? { phase: brain.phase, y: +brain.pos.y.toFixed(1), water: +U.uWater.value.toFixed(1) } : null; },
+    musicInfo() { return ['focus', 'rest'].map((k) => `${k}:${music.playing[k] ? 'playing' : 'stopped'}@${music.level[k].toFixed(2)}${music.buf[k] ? ` loop ${music.buf[k].start.toFixed(3)}-${music.buf[k].end.toFixed(2)}s` : ''}${music.src[k] ? ' (source live)' : ''}`).join(' | '); },
     ditherPeek(sel, k) { const el = document.querySelector(sel); el._dither = (el._dither || 0) + 1; setMask(el, k); },
     manual() { manualMode = true; fakeNow = performance.now(); lastSim = fakeNow; },
     tick(dt) { fakeNow += dt * 1000; renderFrame(fakeNow); },
