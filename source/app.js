@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.15
+  Dither — prototype 0.16
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -2076,7 +2076,7 @@
     if (top !== box._top) { box._top = top; box.style.top = `${top}px`; }
   }
   function resetTimerUndoable() {
-    if (!state.timer.mode.endsWith('-pause')) return;
+    if (!state.timer.mode.endsWith('-pause') || timerAnim) return;
     const prev = JSON.parse(JSON.stringify(state.timer));
     withTimerDither(() => { timerReset(); }, () => showUndo(() => withTimerDither(() => { state.timer = prev; save(); renderTimerText(true); announce(); })));
     $('live').textContent = 'Timer cleared. Undo is available for a few seconds.';
@@ -2380,7 +2380,7 @@
   pill.addEventListener('mouseleave', () => { if (undoFn) showUndo(); });
   pill.addEventListener('focus', () => { pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); });
   pill.addEventListener('blur', () => { if (undoFn) showUndo(); });
-  pill.onclick = () => { if (!undoFn) return; const f = undoFn; hideUndo(); f(); };
+  pill.onclick = () => { if (!undoFn || staticAnim || timerAnim) return; const f = undoFn; hideUndo(); f(); };
   function placeUndo() {
     return;      // positioned by CSS: centered, level with the dock
     const b = tankScreenBox(), vh = grid.rows * grid.chCss, oy = (window.innerHeight - vh) / 2;
@@ -2417,6 +2417,7 @@
   about.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeAbout(); } });
 
   function rescape() {
+    if (staticAnim) return;            // one tank change at a time: extra taps during the dither are ignored
     const prev = { seed: state.seed, growth: state.growth, evap: state.evap, shape: state.shape };
     state.seed = randomSeed(); state.growth = 0; state.evap = 0;
     state.shape = Math.random() < 0.35 ? 'oval' : 'box';       // most tanks are rectangular; about 1 in 3 comes up oval
@@ -2649,6 +2650,7 @@
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce || staticAnim) { swap(); if (after) after(); return; }
     staticAnim = { phase: 'out', t: 0, swap, after };
+    document.body.classList.add('swapping');
   }
   const TRANS = [
     { name: 'shell static', out: 0.6, in: 1.5, waver: true },      // v0.10's: haze on a shell around the glass (slowed down)
@@ -2676,7 +2678,7 @@
     } else {
       const u = Math.min(1, a.t / S.in);
       setTrans(u >= 1 ? 0 : S.waver ? Math.pow(1 - u, 1.3) * (0.72 + 0.28 * Math.cos(u * 15)) : S.gentle ? 0.5 + 0.5 * Math.cos(Math.PI * u) : 1 - ease(u));
-      if (u >= 1) { staticAnim = null; if (a.after) a.after(); }
+      if (u >= 1) { staticAnim = null; document.body.classList.remove('swapping'); if (a.after) a.after(); }
     }
   }
 
@@ -3040,6 +3042,7 @@
     foundScreen() { if (!found) return null; const p = found.root.position.clone().add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
     setZoom(z) { state.zoom = state.zoomTarget = z; },
     slow(f) { timeScale = f; },
+    rescape,
     doneWithWork, brainInfo() { return brain ? { phase: brain.phase, y: +brain.pos.y.toFixed(1), water: +U.uWater.value.toFixed(1) } : null; },
     musicInfo() { return ['focus', 'rest'].map((k) => `${k}:${music.playing[k] ? 'playing' : 'stopped'}@${music.level[k].toFixed(2)}${music.buf[k] ? ` loop ${music.buf[k].start.toFixed(3)}-${music.buf[k].end.toFixed(2)}s` : ''}${music.src[k] ? ' (source live)' : ''}`).join(' | '); },
     ditherPeek(sel, k) { const el = document.querySelector(sel); el._dither = (el._dither || 0) + 1; setMask(el, k); },

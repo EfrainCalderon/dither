@@ -62,6 +62,7 @@
   .vol .icon-btn { --s: calc(30px * var(--ui)); width: calc(48px * var(--ui)); height: calc(48px * var(--ui)); }
   .vol input[type=range] { width: calc(92px * var(--ui)); accent-color: var(--ink); cursor: pointer; }
   body.has-brain #doneBtn { display: none; }
+  body.swapping #rescapeBtn, body.swapping .undo { opacity: 0.45; pointer-events: none; transition: opacity 150ms; }
   @media (max-width: 640px) {     /* phones: stack it, drop the slider (the phone's own buttons do volume), undo floats above both docks */
     .rdock { flex-direction: column; align-items: flex-end; gap: 4px; }
     .vol input[type=range] { display: none; }
