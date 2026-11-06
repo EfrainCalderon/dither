@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.11
+  Dither — prototype 0.12
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -20,7 +20,7 @@
   const TANK = { w: 90, h: 26, d: 40 };            // long, low and shallow
   const MAX_POMS = 10;
   const FOCUS_MIN = 25, REST_MIN = 5;
-  const STORE_KEY = 'dither.v11';
+  const STORE_KEY = 'dither.v12';
   const APP = 'Dither';
   const FONT_MONO = '"Menlo", "SF Mono", "DejaVu Sans Mono", "Consolas", monospace';
   const FONT_UI = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -141,7 +141,7 @@
 
   // ================================================================ state + persistence
   const today = () => new Date().toDateString();
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v09') || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v11') || localStorage.getItem('dither.v09') || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
   const state = {
     seed: saved.seed || '',
     shape: SHAPES[saved.shape] ? saved.shape : 'box',
@@ -2045,6 +2045,7 @@
   }
   function timerPress() {
     audio();     // unlock sound on the first press
+    if (confirmReset) { cancelReset(); return; }     // clicking the timer while it asks = "no"
     const tm = state.timer;
     if (tm.mode === 'idle' || tm.mode === 'rest-done') startPhase('focus');
     else if (tm.mode === 'focus-done') { startPhase('rest'); revealFish(); }
@@ -2052,7 +2053,26 @@
     else { tm.endsAt = Date.now() + tm.remaining * 1000; tm.mode = tm.mode.replace('-pause', '-run'); }
     save(); renderTimerText(true); announce();
   }
-  function timerReset() { state.timer = { mode: 'idle', endsAt: 0, remaining: FOCUS_MIN * 60 }; while (state.pendingFish > 0) revealFish(); save(); renderTimerText(true); announce(); }
+  function timerReset() { confirmReset = false; state.timer = { mode: 'idle', endsAt: 0, remaining: FOCUS_MIN * 60 }; while (state.pendingFish > 0) revealFish(); save(); renderTimerText(true); announce(); }
+  // the pause menu: "reset timer?" under the timer; asking swaps the timer for "are you sure?" and two answers
+  let confirmReset = false;
+  function updateTimerActions() {
+    const box = document.getElementById('timerActions'); if (!box) return;
+    const paused = state.timer.mode.endsWith('-pause');
+    if (!paused) confirmReset = false;
+    box.hidden = !paused;
+    document.getElementById('resetAsk').hidden = confirmReset;
+    document.getElementById('resetYes').hidden = !confirmReset;
+    document.getElementById('resetNo').hidden = !confirmReset;
+  }
+  function askReset() { confirmReset = true; renderTimerText(true); $('live').textContent = 'Reset the timer? Choose yes or no.'; setTimeout(() => $('resetNo').focus(), 30); }
+  function cancelReset() { confirmReset = false; renderTimerText(true); $('live').textContent = 'Still paused.'; }
+  function placeTimerActions() {
+    const box = document.getElementById('timerActions'); if (!box || box.hidden || !band) return;
+    const oy = (window.innerHeight - grid.rows * grid.chCss) / 2;
+    const top = Math.round(oy + (band.bandTop + band.bandH) * grid.chCss + 10);
+    if (top !== box._top) { box._top = top; box.style.top = `${top}px`; }
+  }
   function completePom(fromTimer) {
     state.growth = Math.min(MAX_POMS, state.growth + 1);
     state.evap = Math.min(MAX_POMS, state.evap + 1);
@@ -2087,6 +2107,7 @@
     if (tm.mode === 'rest-done') return { label: 'focus', icon: true, big: '0:00', dim: 1, waiting: true };
     const isRest = tm.mode.startsWith('rest');
     const paused = tm.mode.endsWith('-pause');
+    if (paused && confirmReset) return { label: '', big: 'are you sure?', dim: 1 };
     return { label: paused ? 'paused' : isRest ? 'rest' : '', big: fmt(rem), dim: paused ? 0.6 : 1 };
   }
   function drawTimerOld(ctx, w, h, sx, label, big, halo) {
@@ -2135,7 +2156,7 @@
       ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], h * 0.6 + digitDrop)));
     } else {
       // a word in the digits' place (the name on the start screen): as big as fits the band
-      let size = h * 0.74;
+      let size = h * (big.length > 8 ? 0.5 : 0.74);       // the name is big; a question like 'are you sure?' sits about digit-height
       ctx.font = `800 ${size}px ${FONT_UI}`;
       const maxW = (w / sx) * 0.96, mw = ctx.measureText(big).width;
       if (mw > maxW) { size *= maxW / mw; ctx.font = `800 ${size}px ${FONT_UI}`; }
@@ -2186,6 +2207,7 @@
       if (s.label && !asType) drawLabel(lc, B, s.label, s.icon, grid.ch / grid.cw);
       lblTex.needsUpdate = true;
       updateWords(s);
+      updateTimerActions(); placeTimerActions();
     }
     asciiU.uOverlayOn.value = 1;
     announce();
@@ -2398,6 +2420,10 @@
   ['mouseenter', 'focus'].forEach((ev) => $('timerHit').addEventListener(ev, () => { hovering = true; }));
   ['mouseleave', 'blur'].forEach((ev) => $('timerHit').addEventListener(ev, () => { hovering = false; }));
 
+  $('resetAsk').onclick = askReset;
+  $('resetYes').onclick = () => { timerReset(); $('live').textContent = 'Timer reset.'; };
+  $('resetNo').onclick = () => { cancelReset(); setTimeout(() => $('resetAsk').focus(), 30); };
+  window.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && confirmReset) cancelReset(); });
   $('addPom').onclick = () => { completePom(false); revealFish(); };
   // testing: jump to 3 seconds before the end of whichever phase is next
   $('endSoon').onclick = () => {
@@ -2665,7 +2691,7 @@
     const azr = T.MathUtils.degToRad(state.az), dz = (terrain ? shape.b : 20) * 0.28;
     digitMesh.position.x = Math.sin(azr) * dz; digitMesh.position.z = Math.cos(azr) * dz; digitMesh.rotation.y = azr;
     world.updateMatrixWorld();
-    placeTimerHit(); placeUndo();
+    placeTimerHit(); placeUndo(); placeTimerActions();
     const t0 = performance.now();
     renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
     renderer.setRenderTarget(null); renderer.render(quadScene, quadCam);

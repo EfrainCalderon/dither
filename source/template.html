@@ -67,6 +67,11 @@
   .ghost:hover .ht-icon { transform: rotate(-8deg) scale(1.06); }
   .ghost .ht-text { font-size: calc(18px * var(--ui)); line-height: 1; }
 
+  /* ---------- paused: reset, with a confirm step (stays up while paused; doesn't fade with the dock) */
+  .timer-actions { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; }
+  .timer-actions[hidden], .timer-actions .ghost[hidden] { display: none; }
+  .ghost.plain { padding: 0 calc(20px * var(--ui)); }
+
   /* ---------- undo: centered, level with the dock; fades away in 4 seconds */
   .undo-wrap { position: fixed; z-index: 5; left: 50%; bottom: calc(12px + 11px * var(--ui)); transform: translateX(-50%); }
   .undo.fading { opacity: 0; transition: opacity 4s linear; }
@@ -154,6 +159,11 @@
   <button class="ghost" id="rescapeBtn"><span class="ht-halo"></span><span class="ht-icon" data-icon="dice"></span><span class="ht-text">new tank</span></button>
 </div>
 
+<div class="timer-actions" id="timerActions" hidden>
+  <button class="ghost" id="resetAsk"><span class="ht-halo"></span><span class="ht-icon" data-icon="undo"></span><span class="ht-text">reset timer?</span></button>
+  <button class="ghost" id="resetYes" hidden><span class="ht-halo"></span><span class="ht-icon" data-icon="undo"></span><span class="ht-text">yes, reset timer</span></button>
+  <button class="ghost plain" id="resetNo" hidden><span class="ht-text">no</span></button>
+</div>
 <div class="undo-wrap"><button class="ghost undo" id="undoPill" hidden><span class="ht-halo"></span><span class="ht-icon" data-icon="undo"></span><span class="ht-text">undo</span></button></div>
 
 <div class="about" id="about" role="dialog" aria-modal="true" aria-labelledby="appName">
