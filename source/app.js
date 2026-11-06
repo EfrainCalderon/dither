@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.17
+  Dither — prototype 0.18
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
