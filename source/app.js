@@ -1,5 +1,5 @@
 /*
-  Dither 1.0.1
+  Dither 1.1
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -2029,8 +2029,11 @@
   // ================================================================ sound: a soft synthesized bell
   let audioCtx = null;
   function audio() {
-    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+      audioCtx.onstatechange = () => syncPlayBtn();
+    }
+    if (audioCtx.state !== 'running' && audioCtx.state !== 'closed') audioCtx.resume().catch(() => {});
     return audioCtx;
   }
   // one soft, round tone: a slow swell, a slight shimmer from two close sine waves, a long fade
@@ -2151,6 +2154,7 @@
     const now = performance.now(), dt = Math.min(2, (now - lastBeat) / 1000); lastBeat = now;
     tickTimer();
     if (document.hidden) musicTick(dt);       // when the tab is visible, the render loop does this every frame
+    syncPlayBtn();
   }
   function setEndAlarm() {
     clearTimeout(endAlarm);
@@ -2389,6 +2393,7 @@
     back: '<path d="M19 12H6"/><path d="M11 6.5 5.5 12l5.5 5.5"/>',
     coffee: '<path d="M4.5 10.5h12v4a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M16.5 12h1.2a2.4 2.4 0 0 1 0 4.8h-1.6"/><path d="M8 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M11 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M14 2.8c-1 1.1 1 2.2 0 3.6"/>',
     close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+    play: '<path d="M8 5.2v13.6l10.6-6.8z" fill="#000"/>',
     undo: '<path d="M3.8 12.5a8.2 8.2 0 1 0 2.6-6.4"/><path d="M3.6 3.6v5.2h5.2"/>',
     vol: '<path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/>',
     mute: '<path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
@@ -2673,8 +2678,28 @@
       if (target > 0 && music.fresh[kk] && music.level[kk] > target * 0.95) music.fresh[kk] = false;
     }
   }
-  // if a session is already running when the page opens, the music starts on the first tap anywhere
-  window.addEventListener('pointerdown', () => { if (music.wantGesture) { music.wantGesture = false; primeMusic(); } }, true);
+  // Browsers only let sound start from a tap or click. So when you come back to a page with a session running
+  // (a reload, or a phone that slept), the music waits: the first tap anywhere starts it, and a play button shows until then.
+  function musicKey() { const m = state.timer.mode; return m === 'focus-run' ? 'focus' : m === 'rest-run' ? 'rest' : null; }
+  function musicStalled() {
+    const k = musicKey();
+    if (!k || state.musicMuted || state.musicVol <= 0.001 || remaining() < 4) return false;
+    if (useGraph) return !audioCtx || audioCtx.state !== 'running';
+    return music.wantGesture || !music.el[k] || music.el[k].paused;
+  }
+  function resumeMusic() {
+    audio();
+    const k = musicKey(); if (!k) return;
+    music.wantGesture = false; music.playing[k] = false; playMusic(k);     // picks up where it left off
+  }
+  function syncPlayBtn() {
+    const b = document.getElementById('playBtn'); if (!b) return;
+    const want = musicStalled();
+    if (want === !b.hidden) return;
+    b.hidden = !want;
+    if (want && !document.body.classList.contains('idle')) ditherEl(b, true, 220);
+  }
+  window.addEventListener('pointerdown', () => { if (musicStalled()) resumeMusic(); }, true);
 
   // the haze shell: the tank's own outline, a hair outside the glass, from under the base to above the rim
   const HAZE_VERT = /* glsl */`void main() { gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); }`;
@@ -2759,6 +2784,7 @@
   volBtn.onclick = () => { if (state.musicMuted || state.musicVol <= 0.001) { state.musicMuted = false; if (state.musicVol <= 0.001) state.musicVol = 0.5; } else state.musicMuted = true; save(); syncVolUI(); primeMusic(); };
   volSlider.oninput = () => { state.musicVol = +volSlider.value; state.musicMuted = state.musicVol <= 0.001; save(); syncVolUI(); primeMusic(); };
   syncVolUI();
+  $('playBtn').onclick = () => { resumeMusic(); setTimeout(syncPlayBtn, 200); };
   $('doneBtn').onclick = doneWithWork;
   $('addPom').onclick = () => { completePom(false); revealFish(); };
   // testing: jump to 3 seconds before the end of whichever phase is next

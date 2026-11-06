@@ -69,6 +69,7 @@
     .vol .icon-btn { width: calc(66px * var(--ui)); }
     .vol input[type=range] { writing-mode: vertical-lr; direction: rtl; width: 26px; height: 104px; }
     .vol .tip { display: none; }
+    .vol #playBtn { position: absolute; left: 100%; bottom: 0; }     /* phones: to the right of the speaker */
     .timer-actions .ghost { min-height: 44px; }    /* a comfortable thumb target for reset / done */
   }
 
@@ -191,6 +192,7 @@
 </div>
 <div class="rdock" role="toolbar" aria-label="Music">
   <div class="vol">
+    <button class="icon-btn" id="playBtn" aria-label="Play music" hidden><span class="ht-halo"></span><span class="ht-icon" data-icon="play"></span><span class="tip ht-text" aria-hidden="true">play music</span></button>
     <button class="icon-btn" id="volBtn" aria-label="Mute music" aria-pressed="false"><span class="ht-halo"></span><span class="ht-icon" data-icon="vol"></span><span class="tip ht-text" aria-hidden="true">mute</span></button>
     <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.6" aria-label="Music volume">
   </div>
