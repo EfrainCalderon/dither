@@ -8,7 +8,7 @@ A Pomodoro timer that lives in a tiny halftone aquarium. Finish a focus session,
 - **Play with it.** Drag to turn the tank, click the fish, and keep an eye out for rare things on the sand.
 - **New tank** rolls a fresh layout. Undo is there for 4 seconds.
 - **Music** loops under focus and rest, fading in and out with the timer. Volume and mute sit bottom right.
-- **Done with work** stops the timer and drops a giant brain into the tank. It floats until your next focus session.
+- **Done for the day?** stops the timer and drops a giant brain into the tank. It floats until your next focus session.
 
 Everything is drawn as halftone dots: three.js renders the scene into a tiny image, one pixel per dot, and a second pass turns each pixel into a dot.
 

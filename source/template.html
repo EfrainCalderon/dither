@@ -62,6 +62,7 @@
   .vol .icon-btn { --s: calc(30px * var(--ui)); width: calc(48px * var(--ui)); height: calc(48px * var(--ui)); }
   .vol input[type=range] { width: calc(92px * var(--ui)); accent-color: var(--ink); cursor: pointer; }
   body.has-brain #doneBtn { display: none; }
+  .ghost.plain-done { padding: 0 calc(20px * var(--ui)); }
   body.swapping #rescapeBtn, body.swapping .undo { opacity: 0.45; pointer-events: none; transition: opacity 150ms; }
   @media (max-width: 640px) {     /* phones: stack it, drop the slider (the phone's own buttons do volume), undo floats above both docks */
     .rdock { flex-direction: column; align-items: flex-end; gap: 4px; }
@@ -188,7 +189,7 @@
     <button class="icon-btn" id="volBtn" aria-label="Mute music" aria-pressed="false"><span class="ht-halo"></span><span class="ht-icon" data-icon="vol"></span><span class="tip ht-text" aria-hidden="true">mute</span></button>
     <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.6" aria-label="Music volume">
   </div>
-  <button class="ghost" id="doneBtn"><span class="ht-halo"></span><span class="ht-icon" data-icon="brain"></span><span class="ht-text">done with work</span></button>
+  <button class="ghost plain-done" id="doneBtn"><span class="ht-text">done for the day?</span></button>
 </div>
 <div class="undo-wrap"><button class="ghost undo" id="undoPill" hidden><span class="ht-halo"></span><span class="ht-icon" data-icon="undo"></span><span class="ht-text">undo</span></button></div>
 

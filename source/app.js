@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.16
+  Dither — prototype 0.17
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -2946,8 +2946,20 @@
     if (was) idleEls().forEach((el) => ditherEl(el, true, 220));
     clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, IDLE_MS);
   }
-  ['mousemove', 'mousedown', 'focusin', 'touchstart', 'wheel', 'keydown'].forEach((ev) => window.addEventListener(ev, wake, { passive: true }));
-  document.querySelectorAll('.dock, .rdock, .undo-wrap, .tune, .drawer').forEach((el) => { el.addEventListener('mouseenter', () => { overControls = true; }); el.addEventListener('mouseleave', () => { overControls = false; }); });
+  // the controls live in a band along the bottom: they show when the pointer comes near it (or a tap lands there on
+  // a phone, or keyboard focus reaches them), and go away a moment after it leaves or stops moving. Turning or
+  // tapping the tank never brings them up.
+  const ZONE = () => Math.max(120, Math.min(170, window.innerHeight * 0.18));
+  const inZone = (y) => y > window.innerHeight - ZONE();
+  window.addEventListener('mousemove', (ev) => {
+    if (ev.movementX === 0 && ev.movementY === 0) return;            // a repaint isn't a person moving
+    if (state.dragging) return;
+    if (inZone(ev.clientY) || overControls) wake();
+    else if (!busy() && !document.body.classList.contains('idle')) { clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, 900); }
+  }, { passive: true });
+  window.addEventListener('pointerdown', (ev) => { if (ev.pointerType !== 'mouse' && inZone(ev.clientY)) wake(); }, { passive: true });
+  window.addEventListener('focusin', (ev) => { if (ev.target.closest && ev.target.closest('.dock, .rdock, .undo-wrap, .tune, .drawer')) wake(); });
+  document.querySelectorAll('.dock, .rdock, .undo-wrap, .tune, .drawer').forEach((el) => { el.addEventListener('mouseenter', () => { overControls = true; wake(); }); el.addEventListener('mouseleave', () => { overControls = false; }); });
   document.documentElement.addEventListener('mouseleave', () => { overControls = false; clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, 1200); });   // pointer left the window
   // admin view: type the word anywhere (not in a field)
   let typed = '';
