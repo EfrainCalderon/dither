@@ -1,5 +1,5 @@
 /*
-  Dither 1.2.2
+  Dither 1.2.3
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -2428,17 +2428,17 @@
     if (halo) halo.style.setProperty('--mb', svgURL(ICONS[el.dataset.icon], true));
   });
 
-  // ---- undo: a pill under the tank that fades over 5 seconds
+  // ---- undo: a button that stands in for whatever it undoes
   let undoFn = null, undoTimer = 0;
   const pill = $('undoPill');
   var undoWhere = null;      // "tank" or "timer" while an undo is offered (var: read before this line runs)
   const UNDO_MS = 3000;
+  // "reset timer": undo swaps in under the timer right away, and hovering it holds it there
   function showUndo(fn, where) {
     if (fn) {
-      undoFn = fn; undoWhere = where || 'tank'; wake();               // undo always arrives with the controls showing
-      // it stands in for the button that caused it: "new tank" in the dock, or "reset timer" under the timer
-      const anchor = undoWhere === 'timer' ? $('resetBtn') : $('rescapeBtn');
-      anchor.after(pill); anchor.hidden = true;
+      if (undoWhere === 'tank') cancelTankUndo();
+      undoFn = fn; undoWhere = where || 'timer'; wake();               // undo always arrives with the controls showing
+      $('resetBtn').after(pill); $('resetBtn').hidden = true;
       updateTimerActions(); placeTimerActions();
     }
     pill.hidden = false; pill.classList.remove('leaving');
@@ -2446,14 +2446,65 @@
     pill._fade = setTimeout(() => pill.classList.add('leaving'), UNDO_MS - 280); undoTimer = setTimeout(hideUndo, UNDO_MS);
   }
   function hideUndo() {
-    pill.hidden = true; pill.classList.remove('leaving'); undoFn = null; clearTimeout(undoTimer); clearTimeout(pill._fade);
-    $('rescapeBtn').hidden = false; $('resetBtn').hidden = false; undoWhere = null; updateTimerActions();
+    if (undoWhere === 'tank') cancelTankUndo();
+    stopDither(pill); pill.hidden = true; pill.classList.remove('leaving'); undoFn = null; clearTimeout(undoTimer); clearTimeout(pill._fade);
+    $('resetBtn').hidden = false; undoWhere = null; updateTimerActions();
   }
-  pill.addEventListener('mouseenter', () => { pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); });
-  pill.addEventListener('mouseleave', () => { if (undoFn) showUndo(); });
-  pill.addEventListener('focus', () => { pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); });
-  pill.addEventListener('blur', () => { if (undoFn) showUndo(); });
-  pill.onclick = () => { if (!undoFn || staticAnim || timerAnim) return; const f = undoFn; hideUndo(); f(); };
+  const timerHold = () => { if (undoWhere !== 'timer') return; pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); };
+  const timerRelease = () => { if (undoWhere === 'timer' && undoFn) showUndo(); };
+  pill.addEventListener('mouseenter', timerHold);
+  pill.addEventListener('mouseleave', timerRelease);
+  pill.addEventListener('focus', timerHold);
+  pill.addEventListener('blur', timerRelease);
+  pill.onclick = () => {
+    if (!undoFn || staticAnim || timerAnim) return;
+    const f = undoFn;
+    if (undoWhere === 'tank') endTankUndo(); else hideUndo();
+    f();
+  };
+
+  // "new tank" and its undo take turns in the dock: the button dithers out and undo dithers in. Undo stays 3 s
+  // once the new tank has filled in (hovering doesn't hold it), then dithers out, and "new tank" comes back a
+  // second later. That pause keeps quick clicks from bouncing back and forth between two tanks.
+  const TANK_GAP_MS = 1000, SWAP_MS = 220;
+  let tankStep = 0;       // bumps whenever the cycle moves on, so leftover timers from an earlier step do nothing
+  function offerTankUndo(fn) {
+    const btn = $('rescapeBtn'), step = ++tankStep, hadFocus = document.activeElement === btn;
+    undoFn = fn; undoWhere = 'tank'; wake();
+    clearTimeout(undoTimer); clearTimeout(pill._fade); pill.classList.remove('leaving');
+    ditherEl(btn, false, SWAP_MS, () => {
+      if (step !== tankStep) return;
+      btn.hidden = true; setMask(btn, null);
+      btn.after(pill); pill.hidden = false; ditherEl(pill, true, SWAP_MS);
+      if (hadFocus) pill.focus();
+    });
+  }
+  function startTankUndoClock() {        // runs once the new tank has filled in
+    if (undoWhere !== 'tank') return;
+    const step = tankStep;
+    clearTimeout(undoTimer); undoTimer = setTimeout(() => { if (step === tankStep) endTankUndo(); }, UNDO_MS);
+  }
+  function endTankUndo() {
+    const step = ++tankStep, hadFocus = document.activeElement === pill;
+    undoFn = null; undoWhere = null; clearTimeout(undoTimer);
+    ditherEl(pill, false, SWAP_MS, () => {
+      if (step !== tankStep) return;
+      pill.hidden = true; setMask(pill, null);
+      setTimeout(() => tankBtnBack(step, hadFocus), TANK_GAP_MS);
+    });
+  }
+  function tankBtnBack(step, focus) {
+    if (step !== tankStep) return;
+    if (staticAnim) { setTimeout(() => tankBtnBack(step, focus), 100); return; }     // after an undo, wait for the old tank to settle
+    const btn = $('rescapeBtn'); btn.hidden = false;
+    if (!document.body.classList.contains('idle')) ditherEl(btn, true, SWAP_MS);
+    if (focus) btn.focus();
+  }
+  function cancelTankUndo() {            // something else needs the undo button: put "new tank" straight back
+    tankStep++; clearTimeout(undoTimer); undoFn = null; undoWhere = null;
+    stopDither(pill); pill.hidden = true;
+    const btn = $('rescapeBtn'); stopDither(btn); btn.hidden = false;
+  }
 
   // ---- about: halftone glass with the name, credit and coffee
   const about = $('about');
@@ -2484,13 +2535,13 @@
   about.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeAbout(); } });
 
   function rescape() {
-    if (staticAnim) return;            // one tank change at a time: extra taps during the dither are ignored
+    if (staticAnim || undoWhere === 'tank' || $('rescapeBtn').hidden) return;     // one tank change at a time
     const prev = { seed: state.seed, growth: state.growth, evap: state.evap, shape: state.shape };
     state.seed = randomSeed(); state.growth = 0; state.evap = 0;
     state.shape = Math.random() < 0.35 ? 'oval' : 'box';       // most tanks are rectangular; about 1 in 3 comes up oval
     exitGrowthPreview();
-    withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); },
-      () => showUndo(() => withStatic(() => { Object.assign(state, prev); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }), 'tank'));      // undo's 4 seconds start once the new tank has filled in
+    offerTankUndo(() => withStatic(() => { Object.assign(state, prev); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }));
+    withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }, startTankUndoClock);
   }
   // ================================================================ "done with work": the big brain
   // It falls in from above the screen, plops, then floats and bobs until the next focus session, when it dithers away.
