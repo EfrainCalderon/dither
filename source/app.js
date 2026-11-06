@@ -1,5 +1,5 @@
 /*
-  Dither 1.3.2
+  Dither 1.3.3
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -1910,16 +1910,17 @@
       if (v.spot2) { const q2 = p.clone().multiplyScalar((v.freq2 || v.freq) / Math.max(0.7, sz * 0.6)).addScalar(7.3); if (n3(q2) > (v.thr2 || v.thr + 0.06)) return v.spot2; }
       return v.base;
     };
-    // puffy cheeks: the lower sides of the head swell out
-    const cheekW = (u, a) => { const c = Math.cos(a * Math.PI * 2); return Math.exp(-Math.pow((u - 0.19) / 0.075, 2)) * Math.exp(-Math.pow((c + 0.25) / 0.5, 2)); };
-    const puff = f.pc ? 0.42 : 0;
-    surf(28, 16, (u, a) => {
-      const f0 = prof(u), ang = a * Math.PI * 2, c = Math.cos(ang);
-      return V(Lb / 2 - u * Lb, ry * f0 * c * (c < 0 ? 0.86 : 1), rz * f0 * Math.sin(ang) * (1 + puff * cheekW(u, a)));
-    }, (p, u) => patch(p, u), null, (p, u, a) => { ckNow = puff ? cheekW(u, a) : 0; tag(p, 0, KIND.body); ckNow = 0; });
+    // puffy cheeks: jowls low on the head that swell out and down, so they show in profile as well as from the front
+    const cheekW = (u, a) => { const c = Math.cos(a * Math.PI * 2); return Math.exp(-Math.pow((u - 0.2) / 0.09, 2)) * Math.exp(-Math.pow((c + 0.55) / 0.6, 2)); };
+    const puff = f.pc ? 1 : 0;
+    const bodyPt = (u, ang, lift = 1) => {
+      const f0 = prof(u), c = Math.cos(ang), w = puff * cheekW(u, ang / (Math.PI * 2));
+      return V(Lb / 2 - u * Lb, ry * f0 * c * (c < 0 ? 0.86 * (1 + 0.32 * w) : 1) * lift, rz * f0 * Math.sin(ang) * (1 + 0.5 * w) * lift);
+    };
+    surf(28, 16, (u, a) => bodyPt(u, a * Math.PI * 2), (p, u) => patch(p, u), null, (p, u, a) => { ckNow = puff ? cheekW(u, a) : 0; tag(p, 0, KIND.body); ckNow = 0; });
     // gill covers: a crescent flap behind each eye that lifts open as the fish breathes, over a thin red gill line
     const g0 = 0.17, g1 = 0.27, gEnd = (k) => g0 + (g1 - g0) * (0.55 + 0.45 * Math.cos(k * 1.7));
-    const onBody = (u, ang, lift) => { const f0 = prof(u), c = Math.cos(ang); return V(Lb / 2 - u * Lb, ry * f0 * c * (c < 0 ? 0.86 : 1) * lift, rz * f0 * Math.sin(ang) * (1 + puff * cheekW(u, ang / (Math.PI * 2))) * lift); };
+    const onBody = (u, ang, lift) => bodyPt(u, ang, lift);
     [-1, 1].forEach((side) => {
       const mid = side > 0 ? Math.PI / 2 : Math.PI * 1.5;
       surf(6, 8, (u, k) => { const kk = (k - 0.5) * 1.8, ue = gEnd(kk); return onBody(g0 + (ue - g0) * u, mid + kk * side, 1.035); },
@@ -1968,7 +1969,7 @@
     const Smax = Math.max(...meta.S) + 0.01;
     const eyeU = 0.13, ef = prof(eyeU);
     // the eye sits on the head's real surface (cheeks included), poking about two thirds out
-    const eyeR = R * 0.15, eyeAng = Math.acos(0.22), eyeSurfZ = rz * ef * Math.sin(eyeAng) * (1 + puff * cheekW(eyeU, eyeAng / (Math.PI * 2)));
+    const eyeR = R * 0.15, eyeAng = Math.acos(0.22), eyeSurfZ = rz * ef * Math.sin(eyeAng) * (1 + 0.5 * puff * cheekW(eyeU, eyeAng / (Math.PI * 2)));
     const eye = { s: eyeU * Lb, y: ry * ef * 0.22, z: eyeSurfZ - eyeR * 0.3, r: eyeR };
     const lidMat = patch(V(Lb / 2 - eyeU * Lb, eye.y, eye.z), eyeU);
     const mouth = { s: Lb * 0.012, y: -ry * 0.1, r: R * 0.14 };
@@ -2067,7 +2068,7 @@
       }
       else if (kind === KIND.gill) z += m.side[i] * gillOpen * Math.pow(m.W[i], 1.6) * K.R * 0.2;
       else if (kind === KIND.body) {
-        if (m.CK[i] > 0) z += Math.sign(z) * m.CK[i] * puffNow * K.R * 0.06;
+        if (m.CK[i] > 0) { z += Math.sign(z) * m.CK[i] * puffNow * K.R * 0.07; if (y < 0) y -= m.CK[i] * puffNow * K.R * 0.04; }
         if (jaw > 0 && y < -K.ry * 0.04) { const sj = K.Lb / 2 - x; if (sj < jawS) y -= jaw * (1 - sj / jawS); }
       }
       const s = clamp(K.Lb / 2 - x, 0, K.Smax - 1e-3), fi = s / ds, i0 = Math.floor(fi), i1 = Math.min(SPN - 1, i0 + 1), u = fi - i0;
