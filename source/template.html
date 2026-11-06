@@ -73,6 +73,17 @@
     .timer-actions .ghost { min-height: 44px; }    /* a comfortable thumb target for reset / done */
   }
 
+  /* ---------- touch screens: every control gets at least a 44pt target (Apple's minimum), without changing how it looks.
+     An invisible layer extends each small button or link to 44px each way. */
+  @media (pointer: coarse) {
+    .ghost::before, .vol .icon-btn::before, .line a::before { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; min-width: 100%; height: 44px; min-height: 100%; transform: translate(-50%, -50%); }
+    .vol input[type=range] { min-height: 44px; }
+    .credits a { padding: 6px 2px 23px; margin: 0 -2px; }      /* reach down into the card's empty bottom edge, not up into the coffee button */
+  }
+  @media (pointer: coarse) and (max-width: 640px) {
+    .vol input[type=range] { width: 44px; }
+  }
+
   /* ---------- ghost buttons: an outline, halftone words and icon */
   .ghost { position: relative; display: inline-flex; align-items: center; gap: calc(9px * var(--ui)); height: calc(44px * var(--ui)); padding: 0 calc(20px * var(--ui)) 0 calc(15px * var(--ui)); border-radius: 999px;
            border: 1.5px solid var(--ink); background: transparent; transition: background-color 200ms ease, transform 200ms ease; }
