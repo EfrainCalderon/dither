@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.18
+  Dither — prototype 0.19
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -819,10 +819,16 @@
     {
       const aspectV = (cols * cwDev) / (rows * chDev);
       const bandW = Math.round(cols * (aspectV < 0.8 ? 0.92 : aspectV < 1.25 ? 0.72 : 0.5));     // phones get most of the width
-      const bandH = Math.round(Math.min(rows * 0.21, bandW * (cwDev / chDev) * 0.46)), bandX = Math.round((cols - bandW) / 2), bandTop = Math.round(rows * (aspectV < 0.8 ? 0.05 : 0.03));
-      const lTop = bandTop + Math.round(bandH * 0.66), lH = Math.min(rows - lTop, bandH - Math.round(bandH * 0.66) + Math.max(2, Math.round(bandH * 0.1)));
+      // sizes in cells; GAP is 24 css px between the digits, the word under them, and any button below that
+      const pxc = chDev / dpr, GAP = 24 / pxc, sxr = chDev / cwDev;
+      const digit = Math.min(rows * 0.145, (bandW / sxr) * 0.94 / 2.8);          // "25:00" fits the band
+      const lab = Math.max(digit * 0.34, 15 / pxc);
+      const digitBase = 0.6 + 0.73 * digit, labBase = digitBase + GAP + 0.73 * lab;
+      const bandH = Math.min(rows - 2, Math.ceil(labBase + 0.3 * lab + 1)), bandX = Math.round((cols - bandW) / 2), bandTop = Math.round(rows * (aspectV < 0.8 ? 0.05 : 0.03));
+      const lTop = bandTop + Math.max(0, Math.floor(labBase - lab * 1.05)), lH = Math.min(rows - lTop, Math.ceil(lab * 1.45) + 2);
+      var tl = { digit, lab, digitBase, labBase, actTop: labBase + 0.25 * lab + GAP };
       const F = clamp(Math.round(cwDev / 3), 2, 4);
-      band = { bandH, bandW, bandX, bandTop, lTop, lH, F };
+      band = { bandH, bandW, bandX, bandTop, lTop, lH, F, ...tl };
       lblCanvas.width = bandW * F; lblCanvas.height = lH * F;
       if (lblTex) lblTex.dispose();
       lblTex = new T.CanvasTexture(lblCanvas);
@@ -2067,18 +2073,18 @@
   // paused: a trash icon under the timer. It dithers the timer away to the start screen; undo brings it back
   function updateTimerActions() {
     const box = document.getElementById('timerActions'); if (!box) return;
-    box.hidden = !state.timer.mode.endsWith('-pause') || !!timerAnim;
+    box.hidden = !(state.timer.mode.endsWith('-pause') || undoWhere === 'timer') || !!timerAnim;
   }
   function placeTimerActions() {
     const box = document.getElementById('timerActions'); if (!box || box.hidden || !band) return;
     const oy = (window.innerHeight - grid.rows * grid.chCss) / 2;
-    const top = Math.round(oy + (band.bandTop + band.bandH) * grid.chCss + 4);
+    const top = Math.round(oy + (band.bandTop + band.actTop) * grid.chCss);
     if (top !== box._top) { box._top = top; box.style.top = `${top}px`; }
   }
   function resetTimerUndoable() {
     if (!state.timer.mode.endsWith('-pause') || timerAnim) return;
     const prev = JSON.parse(JSON.stringify(state.timer));
-    withTimerDither(() => { timerReset(); }, () => showUndo(() => withTimerDither(() => { state.timer = prev; save(); renderTimerText(true); announce(); })));
+    withTimerDither(() => { timerReset(); }, () => showUndo(() => withTimerDither(() => { state.timer = prev; save(); renderTimerText(true); announce(); }), 'timer'));
     $('live').textContent = 'Timer cleared. Undo is available for a few seconds.';
   }
   // the timer's own dither: the digits dissolve, the swap happens, the new words fill back in
@@ -2107,7 +2113,6 @@
     state.fish.push(newFish());
     state.pendingFish = (state.pendingFish || 0) + 1;     // revealed when you start your rest
     // face the tank straight on for the rest
-    state.view = Math.round(state.view / 360) * 360;
     if (fromTimer) { bell('focus-done'); }
     exitGrowthPreview(); save(); updateDrawer();
     $('live').textContent = 'Focus session complete. Start your rest to meet a new fish.';
@@ -2174,21 +2179,21 @@
     };
     ctx.save(); ctx.translate(w / 2, 0); ctx.scale(sx, 1);
     if (/\d/.test(big)) {
-      let bigSize = h * 0.69;                                     // 15% bigger than v0.9
+      let bigSize = band.digit;
       { const units = big.split('').reduce((a, c) => a + (c === ':' ? 0.32 : 0.62), 0), maxW = (w / sx) * 0.94; if (bigSize * units > maxW) bigSize = maxW / units; }   // never wider than the band
       ctx.font = `800 ${bigSize}px ${FONT_UI}`;
       const slot = bigSize * 0.62, colon = bigSize * 0.32;    // fixed-width slots: no jiggle
       const widths = big.split('').map((c) => (c === ':' ? colon : slot));
       let x = -widths.reduce((a, b) => a + b, 0) / 2;
       const xs = widths.map((wd) => { const c = x + wd / 2; x += wd; return c; });
-      ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], h * 0.6 + digitDrop)));
+      ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], band.digitBase)));
     } else {
       // a word in the digits' place (the name on the start screen): as big as fits the band
-      let size = h * (big.length > 8 ? 0.5 : 0.74);       // the name is big; a question like 'are you sure?' sits about digit-height
+      let size = band.digit * 1.1;
       ctx.font = `800 ${size}px ${FONT_UI}`;
       const maxW = (w / sx) * 0.96, mw = ctx.measureText(big).width;
       if (mw > maxW) { size *= maxW / mw; ctx.font = `800 ${size}px ${FONT_UI}`; }
-      ink((draw) => draw(big, 0, h * 0.64));
+      ink((draw) => draw(big, 0, band.digitBase));
     }
     if (label) {
       ctx.font = `800 ${h * 0.24}px ${FONT_UI}`;
@@ -2242,15 +2247,15 @@
   }
   // the small words, drawn at F× the grid so each cell can hold F×F tiny dots; lighter weight than the digits
   function drawLabel(ctx, B, label, icon, sx) {
-    const F = B.F, h = B.bandH * F, offY = (B.lTop - B.bandTop) * F;
+    const F = B.F, h = B.bandH * F, offY = (B.lTop - B.bandTop) * F;   // drawn in band coordinates, shifted up into the label strip
     ctx.save(); ctx.translate(ctx.canvas.width / 2, -offY); ctx.scale(sx, 1);
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
-    let size = h * 0.24;
+    let size = B.lab * F;
     ctx.font = `600 ${size}px ${FONT_UI}`;
     { const need = ctx.measureText(label).width * 1.1 + (icon ? size : 0), maxW = (ctx.canvas.width / sx) * 0.92; if (need > maxW) { size *= maxW / need; ctx.font = `600 ${size}px ${FONT_UI}`; } }
     if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(size * 0.05)}px`;
     const tw = ctx.measureText(label).width, iw = icon ? size * 0.58 : 0, gap = icon ? size * 0.38 : 0;
-    const x0 = -(tw + iw + gap) / 2, base = h * 0.93;
+    const x0 = -(tw + iw + gap) / 2, base = B.labBase * F;
     const shape = () => {
       ctx.fillText(label, x0 + iw + gap, base);
       if (icon) { const th = size * 0.68, ty = base - size * 0.69; ctx.beginPath(); ctx.moveTo(x0, ty); ctx.lineTo(x0 + iw, ty + th / 2); ctx.lineTo(x0, ty + th); ctx.closePath(); ctx.fill(); }
@@ -2369,13 +2374,24 @@
   // ---- undo: a pill under the tank that fades over 5 seconds
   let undoFn = null, undoTimer = 0;
   const pill = $('undoPill');
-  function showUndo(fn) {
-    if (fn) { undoFn = fn; wake(); }      // undo always arrives with the controls showing
+  var undoWhere = null;      // "tank" or "timer" while an undo is offered (var: read before this line runs)
+  const UNDO_MS = 3000;
+  function showUndo(fn, where) {
+    if (fn) {
+      undoFn = fn; undoWhere = where || 'tank'; wake();               // undo always arrives with the controls showing
+      // it stands in for the button that caused it: "new tank" in the dock, or "reset timer" under the timer
+      const anchor = undoWhere === 'timer' ? $('resetBtn') : $('rescapeBtn');
+      anchor.after(pill); anchor.hidden = true;
+      updateTimerActions(); placeTimerActions();
+    }
     pill.hidden = false; pill.classList.remove('leaving');
     clearTimeout(undoTimer); clearTimeout(pill._fade);
-    pill._fade = setTimeout(() => pill.classList.add('leaving'), 3700); undoTimer = setTimeout(hideUndo, 4000);
+    pill._fade = setTimeout(() => pill.classList.add('leaving'), UNDO_MS - 280); undoTimer = setTimeout(hideUndo, UNDO_MS);
   }
-  function hideUndo() { pill.hidden = true; pill.classList.remove('leaving'); undoFn = null; clearTimeout(undoTimer); clearTimeout(pill._fade); }
+  function hideUndo() {
+    pill.hidden = true; pill.classList.remove('leaving'); undoFn = null; clearTimeout(undoTimer); clearTimeout(pill._fade);
+    $('rescapeBtn').hidden = false; $('resetBtn').hidden = false; undoWhere = null; updateTimerActions();
+  }
   pill.addEventListener('mouseenter', () => { pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); });
   pill.addEventListener('mouseleave', () => { if (undoFn) showUndo(); });
   pill.addEventListener('focus', () => { pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); });
@@ -2423,7 +2439,7 @@
     state.shape = Math.random() < 0.35 ? 'oval' : 'box';       // most tanks are rectangular; about 1 in 3 comes up oval
     exitGrowthPreview();
     withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); },
-      () => showUndo(() => withStatic(() => { Object.assign(state, prev); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); })));      // undo's 4 seconds start once the new tank has filled in
+      () => showUndo(() => withStatic(() => { Object.assign(state, prev); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }), 'tank'));      // undo's 4 seconds start once the new tank has filled in
   }
   // ================================================================ "done with work": the big brain
   // It falls in from above the screen, plops, then floats and bobs until the next focus session, when it dithers away.
@@ -2866,6 +2882,7 @@
     }
     drag = null;
   };
+  const zoomMin = () => (camera.aspect < 0.8 ? 0.3 : 0.42);       // phones can pinch in close enough to see the detail
   const touchPts = new Map(); let pinch = null;
   const spread = () => { const [a, b] = [...touchPts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
   canvas.addEventListener('pointerdown', (ev) => {
@@ -2878,7 +2895,7 @@
   canvas.addEventListener('pointermove', (ev) => {
     if (!touchPts.has(ev.pointerId)) return;
     touchPts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-    if (pinch && touchPts.size >= 2) state.zoomTarget = clamp(pinch.z0 * pinch.d0 / spread(), 0.55, 1.3);     // fingers apart = closer
+    if (pinch && touchPts.size >= 2) state.zoomTarget = clamp(pinch.z0 * pinch.d0 / spread(), zoomMin(), 1.3);     // fingers apart = closer
   });
   const endTouch = (ev) => { touchPts.delete(ev.pointerId); if (touchPts.size < 2 && pinch) { pinch = null; setTimeout(() => { suppressClick = false; }, 250); } };
   canvas.addEventListener('pointerup', endTouch); canvas.addEventListener('pointercancel', endTouch);
@@ -2915,7 +2932,7 @@
       if (ray.ray.intersectPlane(new T.Plane(UP, -U.uWater.value), hit) && inside(hit.x, hit.z)) addRipple(hit.x, hit.z, 0.5, U.uTime.value);
     }
   });
-  window.addEventListener('wheel', (ev) => { if (ev.target === canvas || ev.target.id === 'timerHit') state.zoomTarget = clamp(state.zoomTarget * Math.exp(ev.deltaY * 0.0012), 0.55, 1.3); }, { passive: true });
+  window.addEventListener('wheel', (ev) => { if (ev.target === canvas || ev.target.id === 'timerHit') state.zoomTarget = clamp(state.zoomTarget * Math.exp(ev.deltaY * 0.0012), zoomMin(), 1.3); }, { passive: true });
   window.addEventListener('keydown', (ev) => {
     if ((ev.target.tagName === 'INPUT' && ev.target.type === 'range') || ev.target.isContentEditable) return;
     if (/^[a-z]$/i.test(ev.key) && ev.key.toLowerCase() !== 'i') return;
@@ -2974,6 +2991,7 @@
 
   // ================================================================ loop
   const start = performance.now();
+  const TURNS = 6;
   let timeScale = 1, simClock = 0, wordsGlow = false;     // timeScale only changes in tests
   let lastRender = -1e9, lastSim = start, statTick = 0, lastCost = 0, lastSlow = 0;
   state.driftAmpTarget = 30;
@@ -2981,14 +2999,20 @@
     const dtReal = Math.min(0.25, (now - lastSim) / 1000) * timeScale; simClock += dtReal;
     const t = simClock, dt = dtReal;
     lastSim = now;
-    // slow sway: ±30° over 3 minutes on the long sides; still on the short sides and during rest
-    const resting = state.timer.mode.startsWith('rest') || state.timer.mode === 'focus-done';
-    const still = resting || (facing() !== 0 && facing() !== 180);
-    const ampT = still || state.dragging ? 0 : 30;
-    state.driftAmp += (ampT - state.driftAmp) * (1 - Math.exp(-dt * 0.5));
-    if (state.driftAmp < 0.5 && still) state.driftPhase = 0;
-    else state.driftPhase += dt * (Math.PI * 2 / 180);     // one slow back-and-forth every 3 minutes
-    const azT = state.view + state.driftAmp * Math.sin(state.driftPhase);
+    // the tank turns with the clock: six slow turns over a focus session (one every ~4 minutes), landing face-on at 0:00.
+    // Paused, it holds; resting, it faces you; idle, it sways gently.
+    const tmode = state.timer.mode, inFocus = tmode === 'focus-run' || tmode === 'focus-pause';
+    const progress = inFocus ? clamp(1 - remaining() / (FOCUS_MIN * 60), 0, 1) : 0;
+    if (!inFocus && state.lastProgress > 0) {          // fold the turns in so nothing jumps; a finished session lands face-on for the fish
+      const v = state.view + state.lastProgress * TURNS * 360;
+      state.view = state.lastProgress > 0.995 ? Math.round(v / 360) * 360 : Math.round(v / 90) * 90;
+    }
+    state.lastProgress = progress;
+    const ampT = tmode === 'idle' && !state.dragging ? 24 : 0;
+    state.driftAmp += (ampT - state.driftAmp) * (1 - Math.exp(-dt * 0.6));
+    if (state.driftAmp < 0.5 && ampT === 0) state.driftPhase = 0;
+    else state.driftPhase += dt * (Math.PI * 2 / 60);      // idle: one gentle back-and-forth a minute
+    const azT = state.view + progress * TURNS * 360 + state.driftAmp * Math.sin(state.driftPhase);
     state.az += (azT - state.az) * (1 - Math.exp(-dt * (state.dragging ? 14 : 1.6)));
     state.zoom += (state.zoomTarget - state.zoom) * (1 - Math.exp(-dt * 2.2));
     // growth + water ease toward their targets

@@ -55,7 +55,9 @@
   .dithering { -webkit-mask-repeat: repeat; mask-repeat: repeat; }
 
   /* ---------- bottom right: music volume, and "done with work" */
-  .rdock { position: fixed; z-index: 4; right: calc(14px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px; }
+  .rdock { position: fixed; z-index: 4; right: calc(14px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px;
+           height: calc(66px * var(--ui)); }      /* same height as the left dock, so both rows of buttons share a centerline */
+  .dock { height: calc(66px * var(--ui)); }
   body.idle .rdock { visibility: hidden; pointer-events: none; }
   .vol { display: flex; align-items: center; gap: 2px; }
   .vol .icon-btn { --s: calc(30px * var(--ui)); width: calc(48px * var(--ui)); height: calc(48px * var(--ui)); }
@@ -63,10 +65,12 @@
   body.has-brain #doneBtn { display: none; }
   .ghost.plain-done { padding: 0 calc(20px * var(--ui)); }
   body.swapping #rescapeBtn, body.swapping .undo { opacity: 0.45; pointer-events: none; transition: opacity 150ms; }
-  @media (max-width: 640px) {     /* phones: stack it, drop the slider (the phone's own buttons do volume), undo floats above both docks */
-    .rdock { flex-direction: column; align-items: flex-end; gap: 4px; }
-    .vol input[type=range] { display: none; }
-    .undo-wrap { bottom: calc(118px + env(safe-area-inset-bottom)); }
+  @media (max-width: 640px) {     /* phones: volume stacks above info + new tank on the left, with a vertical slider */
+    .vol { position: fixed; left: calc(14px + env(safe-area-inset-left)); bottom: calc(12px + 66px * var(--ui) + 8px + env(safe-area-inset-bottom));
+           flex-direction: column-reverse; align-items: center; gap: 6px; }
+    .vol .icon-btn { width: calc(66px * var(--ui)); }
+    .vol input[type=range] { writing-mode: vertical-lr; direction: rtl; width: 26px; height: 104px; }
+    .vol .tip { display: none; }
   }
 
   /* ---------- ghost buttons: an outline, halftone words and icon */
@@ -74,6 +78,7 @@
            border: 1.5px solid var(--ink); background: transparent; transition: background-color 200ms ease, transform 200ms ease; }
   .ghost:hover, .ghost:focus-visible { background: color-mix(in srgb, var(--ink) 9%, transparent); }
   .ghost:active { transform: scale(0.97); }
+  .ghost[hidden], .icon-btn[hidden] { display: none; }
   .ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 70%, transparent); }
   .ghost .ht-icon { --s: calc(24px * var(--ui)); }
   .ghost .ht-halo { --s: calc(24px * var(--ui)); left: calc(27px * var(--ui)); }
@@ -89,7 +94,7 @@
   .timer-actions .icon-btn:hover .tip, .timer-actions .icon-btn:focus-visible .tip { transform: translate(-50%, 0); }
 
   /* ---------- undo: centered, level with the dock; fades away in 4 seconds */
-  .undo-wrap { position: fixed; z-index: 5; left: 50%; bottom: calc(12px + 11px * var(--ui) + env(safe-area-inset-bottom)); transform: translateX(-50%); }
+  .undo-wrap { display: none; }      /* the undo button lives next to whatever it undoes */
   .undo[hidden] { display: none; }
   .undo { transition: opacity 280ms ease; }
   .undo.leaving { opacity: 0; }
