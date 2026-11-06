@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.12
+  Dither — prototype 0.13
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -20,7 +20,7 @@
   const TANK = { w: 90, h: 26, d: 40 };            // long, low and shallow
   const MAX_POMS = 10;
   const FOCUS_MIN = 25, REST_MIN = 5;
-  const STORE_KEY = 'dither.v12';
+  const STORE_KEY = 'dither.v13';
   const APP = 'Dither';
   const FONT_MONO = '"Menlo", "SF Mono", "DejaVu Sans Mono", "Consolas", monospace';
   const FONT_UI = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -141,7 +141,7 @@
 
   // ================================================================ state + persistence
   const today = () => new Date().toDateString();
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v11') || localStorage.getItem('dither.v09') || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v12') || localStorage.getItem('dither.v11') || localStorage.getItem('dither.v09') || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
   const state = {
     seed: saved.seed || '',
     shape: SHAPES[saved.shape] ? saved.shape : 'box',
@@ -537,6 +537,8 @@
   const ASCII_VERT = /* glsl */`void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`;
   const ASCII_FRAG = /* glsl */`
     uniform sampler2D uScene, uAtlas, uPal, uOverlay, uLbl;
+    uniform float uTimerDither;
+    float bay8(vec2 p) { vec2 a = mod(p, 2.0), b = mod(floor(p / 2.0), 2.0), c = mod(floor(p / 4.0), 2.0); return (mod(2.0 * a.x + 3.0 * a.y, 4.0) * 16.0 + mod(2.0 * b.x + 3.0 * b.y, 4.0) * 4.0 + mod(2.0 * c.x + 3.0 * c.y, 4.0) + 0.5) / 64.0; }
     uniform vec4 uLblRect; uniform float uLblF;
     uniform vec2 uCellPx, uOffset, uGrid, uRes;
     uniform float uLook, uTime, uStars, uAurora, uOverlayOn, uOverlayDim, uOverlayGlow;
@@ -584,7 +586,7 @@
           float lf = lo.r * lo.a, lg = lo.g * lo.a;
           vec2 sq = inC - (sub + 0.5) * sp;
           float sr = 0.5 * min(sp.x, sp.y);
-          if (lf > 0.3 && !(uOverlayDim < 0.99 && bayer4(cell * uLblF + sub) > 0.6)) {
+          if (lf > 0.3 && !(uOverlayDim < 0.99 && bayer4(cell * uLblF + sub) > 0.6) && !(uTimerDither > 0.001 && bay8(cell * uLblF + sub) < uTimerDither)) {
             float r = sr * (0.62 + 0.45 * lf) * (1.0 + 0.08 * uOverlayGlow);
             float m = 1.0 - smoothstep(r - 0.6, r + 0.6, length(sq));
             gl_FragColor = vec4(mix(bg, uOverlayCol, m), 1.0); return;
@@ -598,7 +600,7 @@
         }
         vec4 o = texelFetch(uOverlay, ivec2(cell), 0);
         float fill = o.r * o.a, glow = o.g * o.a;
-        if (fill > 0.35 && !(uOverlayDim < 0.99 && bayer4(cell) > 0.6)) {
+        if (fill > 0.35 && !(uOverlayDim < 0.99 && bayer4(cell) > 0.6) && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
           float r = rMax * (0.55 + 0.45 * fill) * (1.05 + 0.1 * uOverlayGlow);
           float m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
           gl_FragColor = vec4(mix(bg, uOverlayCol, m), 1.0); return;
@@ -731,7 +733,7 @@
 
   const asciiU = {
     uScene: { value: null }, uAtlas: { value: null }, uPal: { value: null }, uOverlay: { value: null },
-    uLbl: { value: null }, uLblRect: { value: new T.Vector4(0, 0, 0, 0) }, uLblF: { value: 3 },
+    uLbl: { value: null }, uLblRect: { value: new T.Vector4(0, 0, 0, 0) }, uLblF: { value: 3 }, uTimerDither: { value: 0 },
     uCellPx: { value: new T.Vector2() }, uOffset: { value: new T.Vector2() }, uGrid: { value: new T.Vector2() }, uRes: { value: new T.Vector2() },
     uLook: { value: 0 }, uTime: U.uTime, uStars: { value: 0 }, uAurora: { value: 0 }, uOverlayOn: { value: 1 }, uOverlayDim: { value: 1 }, uOverlayGlow: { value: 0 }, uGlowCol: { value: vec3('#ffffff') },
     uRip: U.uRip, uShape: U.uShape, uShapePh: U.uShapePh,
@@ -812,7 +814,9 @@
     asciiU.uOverlay.value = overlayTex;
     // where the timer sits (in cells), and a finer dot screen for the words under it
     {
-      const bandH = Math.round(rows * 0.21), bandW = Math.round(cols * 0.5), bandX = Math.round((cols - bandW) / 2), bandTop = Math.round(rows * 0.03);
+      const aspectV = (cols * cwDev) / (rows * chDev);
+      const bandW = Math.round(cols * (aspectV < 0.8 ? 0.92 : aspectV < 1.25 ? 0.72 : 0.5));     // phones get most of the width
+      const bandH = Math.round(Math.min(rows * 0.21, bandW * (cwDev / chDev) * 0.46)), bandX = Math.round((cols - bandW) / 2), bandTop = Math.round(rows * (aspectV < 0.8 ? 0.05 : 0.03));
       const lTop = bandTop + Math.round(bandH * 0.66), lH = Math.min(rows - lTop, bandH - Math.round(bandH * 0.66) + Math.max(2, Math.round(bandH * 0.1)));
       const F = clamp(Math.round(cwDev / 3), 2, 4);
       band = { bandH, bandW, bandX, bandTop, lTop, lH, F };
@@ -831,7 +835,7 @@
   }
   function baseDistance() {
     const t = Math.tan(T.MathUtils.degToRad(camera.fov / 2));
-    return Math.max(62 / (2 * t), 142 / (2 * t * camera.aspect));
+    return Math.max(62 / (2 * t), (camera.aspect < 0.8 ? 106 : 142) / (2 * t * camera.aspect));     // phones: frame the tank closer
   }
   function placeCamera() {
     const dist = baseDistance() * state.zoom;
@@ -2045,7 +2049,6 @@
   }
   function timerPress() {
     audio();     // unlock sound on the first press
-    if (confirmReset) { cancelReset(); return; }     // clicking the timer while it asks = "no"
     const tm = state.timer;
     if (tm.mode === 'idle' || tm.mode === 'rest-done') startPhase('focus');
     else if (tm.mode === 'focus-done') { startPhase('rest'); revealFish(); }
@@ -2053,25 +2056,43 @@
     else { tm.endsAt = Date.now() + tm.remaining * 1000; tm.mode = tm.mode.replace('-pause', '-run'); }
     save(); renderTimerText(true); announce();
   }
-  function timerReset() { confirmReset = false; state.timer = { mode: 'idle', endsAt: 0, remaining: FOCUS_MIN * 60 }; while (state.pendingFish > 0) revealFish(); save(); renderTimerText(true); announce(); }
-  // the pause menu: "reset timer?" under the timer; asking swaps the timer for "are you sure?" and two answers
-  let confirmReset = false;
+  function timerReset() { state.timer = { mode: 'idle', endsAt: 0, remaining: FOCUS_MIN * 60 }; while (state.pendingFish > 0) revealFish(); save(); renderTimerText(true); announce(); }
+  // paused: a trash icon under the timer. It dithers the timer away to the start screen; undo brings it back
   function updateTimerActions() {
     const box = document.getElementById('timerActions'); if (!box) return;
-    const paused = state.timer.mode.endsWith('-pause');
-    if (!paused) confirmReset = false;
-    box.hidden = !paused;
-    document.getElementById('resetAsk').hidden = confirmReset;
-    document.getElementById('resetYes').hidden = !confirmReset;
-    document.getElementById('resetNo').hidden = !confirmReset;
+    box.hidden = !state.timer.mode.endsWith('-pause') || !!timerAnim;
   }
-  function askReset() { confirmReset = true; renderTimerText(true); $('live').textContent = 'Reset the timer? Choose yes or no.'; setTimeout(() => $('resetNo').focus(), 30); }
-  function cancelReset() { confirmReset = false; renderTimerText(true); $('live').textContent = 'Still paused.'; }
   function placeTimerActions() {
     const box = document.getElementById('timerActions'); if (!box || box.hidden || !band) return;
     const oy = (window.innerHeight - grid.rows * grid.chCss) / 2;
-    const top = Math.round(oy + (band.bandTop + band.bandH) * grid.chCss + 10);
+    const top = Math.round(oy + (band.bandTop + band.bandH) * grid.chCss + 4);
     if (top !== box._top) { box._top = top; box.style.top = `${top}px`; }
+  }
+  function trashTimer() {
+    if (!state.timer.mode.endsWith('-pause')) return;
+    const prev = JSON.parse(JSON.stringify(state.timer));
+    withTimerDither(() => { timerReset(); }, () => showUndo(() => withTimerDither(() => { state.timer = prev; save(); renderTimerText(true); announce(); })));
+    $('live').textContent = 'Timer cleared. Undo is available for a few seconds.';
+  }
+  // the timer's own dither: the digits dissolve, the swap happens, the new words fill back in
+  let timerAnim = null;
+  function withTimerDither(swap, after) {
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || timerAnim) { swap(); if (after) after(); return; }
+    timerAnim = { phase: 'out', t: 0, swap, after };
+    updateTimerActions();
+  }
+  function stepTimerDither(dt) {
+    const a = timerAnim; if (!a) return;
+    a.t += Math.min(dt, 0.06);
+    const OUT = 0.55, IN = 0.85;
+    if (a.phase === 'out') {
+      const u = Math.min(1, a.t / OUT); asciiU.uTimerDither.value = 0.5 - 0.5 * Math.cos(Math.PI * u);
+      if (u >= 1) { a.swap(); a.phase = 'in'; a.t = 0; }
+    } else {
+      const u = Math.min(1, a.t / IN); asciiU.uTimerDither.value = 0.5 + 0.5 * Math.cos(Math.PI * u);
+      if (u >= 1) { asciiU.uTimerDither.value = 0; timerAnim = null; updateTimerActions(); if (a.after) a.after(); }
+    }
   }
   function completePom(fromTimer) {
     state.growth = Math.min(MAX_POMS, state.growth + 1);
@@ -2107,7 +2128,6 @@
     if (tm.mode === 'rest-done') return { label: 'focus', icon: true, big: '0:00', dim: 1, waiting: true };
     const isRest = tm.mode.startsWith('rest');
     const paused = tm.mode.endsWith('-pause');
-    if (paused && confirmReset) return { label: '', big: 'are you sure?', dim: 1 };
     return { label: paused ? 'paused' : isRest ? 'rest' : '', big: fmt(rem), dim: paused ? 0.6 : 1 };
   }
   function drawTimerOld(ctx, w, h, sx, label, big, halo) {
@@ -2147,7 +2167,8 @@
     };
     ctx.save(); ctx.translate(w / 2, 0); ctx.scale(sx, 1);
     if (/\d/.test(big)) {
-      const bigSize = h * 0.69;                                   // 15% bigger than v0.9
+      let bigSize = h * 0.69;                                     // 15% bigger than v0.9
+      { const units = big.split('').reduce((a, c) => a + (c === ':' ? 0.32 : 0.62), 0), maxW = (w / sx) * 0.94; if (bigSize * units > maxW) bigSize = maxW / units; }   // never wider than the band
       ctx.font = `800 ${bigSize}px ${FONT_UI}`;
       const slot = bigSize * 0.62, colon = bigSize * 0.32;    // fixed-width slots: no jiggle
       const widths = big.split('').map((c) => (c === ':' ? colon : slot));
@@ -2217,8 +2238,9 @@
     const F = B.F, h = B.bandH * F, offY = (B.lTop - B.bandTop) * F;
     ctx.save(); ctx.translate(ctx.canvas.width / 2, -offY); ctx.scale(sx, 1);
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
-    const size = h * 0.24;
+    let size = h * 0.24;
     ctx.font = `600 ${size}px ${FONT_UI}`;
+    { const need = ctx.measureText(label).width * 1.1 + (icon ? size : 0), maxW = (ctx.canvas.width / sx) * 0.92; if (need > maxW) { size *= maxW / need; ctx.font = `600 ${size}px ${FONT_UI}`; } }
     if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(size * 0.05)}px`;
     const tw = ctx.measureText(label).width, iw = icon ? size * 0.58 : 0, gap = icon ? size * 0.38 : 0;
     const x0 = -(tw + iw + gap) / 2, base = h * 0.93;
@@ -2268,14 +2290,52 @@
       // trim to the glyph area (the canvas has some empty space)
       const padX = (x1 - x0) * 0.12, padY = (y1 - y0) * 0.02; x0 += padX; x1 -= padX; y0 += padY; y1 -= padY;
     } else {
-      const vw = window.innerWidth, vh = window.innerHeight;
-      x0 = vw * 0.36; x1 = vw * 0.64; y0 = vh * 0.035; y1 = vh * 0.235;
+      const ox = (window.innerWidth - grid.cols * grid.cwCss) / 2, oy = (window.innerHeight - grid.rows * grid.chCss) / 2;
+      x0 = ox + (band.bandX + band.bandW * 0.15) * grid.cwCss; x1 = ox + (band.bandX + band.bandW * 0.85) * grid.cwCss;
+      y0 = oy + band.bandTop * grid.chCss; y1 = oy + (band.bandTop + band.bandH) * grid.chCss;
     }
     Object.assign(hit.style, { left: `${x0}px`, top: `${y0}px`, width: `${Math.max(40, x1 - x0)}px`, height: `${Math.max(30, y1 - y0)}px` });
   }
 
   // ================================================================ UI
   const $ = (id) => document.getElementById(id);
+  // ---- dither for page elements: an 8×8 Bayer tile as a CSS mask, stepped from empty to full (or back)
+  const D_STEPS = 16, D_CELL = 3;
+  const ditherMasks = (() => {
+    const B = [[0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26], [12, 44, 4, 36, 14, 46, 6, 38], [60, 28, 52, 20, 62, 30, 54, 22],
+               [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25], [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21]];
+    const c = document.createElement('canvas'); c.width = c.height = 8 * D_CELL; const x = c.getContext('2d'), out = [];
+    for (let k = 0; k <= D_STEPS; k++) {
+      x.clearRect(0, 0, c.width, c.height); x.fillStyle = '#000';
+      for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) if (B[j][i] < (k / D_STEPS) * 64) x.fillRect(i * D_CELL, j * D_CELL, D_CELL, D_CELL);
+      out.push(`url(${c.toDataURL()})`);
+    }
+    return out;
+  })();
+  const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function setMask(el, k) {
+    if (k == null) { el.style.webkitMaskImage = el.style.maskImage = ''; el.classList.remove('dithering'); return; }
+    el.classList.add('dithering');
+    el.style.webkitMaskSize = el.style.maskSize = `${8 * D_CELL}px ${8 * D_CELL}px`;
+    el.style.webkitMaskImage = el.style.maskImage = ditherMasks[k];
+  }
+  // show: dither in from nothing; hide: dither out to nothing. done() runs at the end.
+  function ditherEl(el, show, ms, done) {
+    const token = (el._dither = (el._dither || 0) + 1);
+    if (reduceMotion()) { setMask(el, null); if (done) done(); return; }
+    const t0 = performance.now();
+    const step = (now) => {
+      if (el._dither !== token) return;              // a newer animation took over
+      const u = Math.min(1, (now - t0) / ms);
+      if (u >= 1) { setMask(el, show ? null : 0); if (done) done(); return; }
+      setMask(el, Math.round((show ? u : 1 - u) * D_STEPS));
+      requestAnimationFrame(step);
+    };
+    setMask(el, show ? 0 : D_STEPS);
+    requestAnimationFrame(step);
+  }
+  const stopDither = (el) => { el._dither = (el._dither || 0) + 1; setMask(el, null); };
+
   // ---- halftone icons: an SVG used as a mask over a dot pattern; the halo is a blurred copy
   const ICONS = {
     refresh: '<path d="M20.2 12.5a8.2 8.2 0 1 1-2.6-6.4"/><path d="M20.4 3.6v5.2h-5.2"/>',
@@ -2284,6 +2344,7 @@
     coffee: '<path d="M4.5 10.5h12v4a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M16.5 12h1.2a2.4 2.4 0 0 1 0 4.8h-1.6"/><path d="M8 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M11 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M14 2.8c-1 1.1 1 2.2 0 3.6"/>',
     close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
     undo: '<path d="M3.8 12.5a8.2 8.2 0 1 0 2.6-6.4"/><path d="M3.6 3.6v5.2h5.2"/>',
+    trash: '<path d="M4 7h16"/><path d="M9.5 7V4.6h5V7"/><path d="M6.4 7l1 12.1a1.7 1.7 0 0 0 1.7 1.5h5.8a1.7 1.7 0 0 0 1.7-1.5L17.6 7"/><path d="M10.2 10.6v6.4M13.8 10.6v6.4"/>',
     dice: '<g transform="rotate(-14 7.2 14.6)"><rect x="1.8" y="9.2" width="10.8" height="10.8" rx="2.4"/><circle cx="4.9" cy="12.3" r="1.05" fill="#000" stroke="none"/><circle cx="7.2" cy="14.6" r="1.05" fill="#000" stroke="none"/><circle cx="9.5" cy="16.9" r="1.05" fill="#000" stroke="none"/></g><g transform="rotate(12 16.6 8)"><rect x="11.2" y="2.6" width="10.8" height="10.8" rx="2.4"/><circle cx="14.3" cy="5.7" r="1.05" fill="#000" stroke="none"/><circle cx="18.9" cy="5.7" r="1.05" fill="#000" stroke="none"/><circle cx="14.3" cy="10.3" r="1.05" fill="#000" stroke="none"/><circle cx="18.9" cy="10.3" r="1.05" fill="#000" stroke="none"/></g>',
   };
   const svgURL = (inner, halo) => `url("data:image/svg+xml,${encodeURIComponent(halo
@@ -2296,19 +2357,19 @@
   });
 
   // ---- undo: a pill under the tank that fades over 5 seconds
-  let undoPrev = null, undoTimer = 0;
+  let undoFn = null, undoTimer = 0;
   const pill = $('undoPill');
-  function showUndo(prev) {
-    if (prev) undoPrev = prev;
-    pill.hidden = false; pill.classList.remove('fading'); void pill.offsetWidth; pill.classList.add('fading');
+  function showUndo(fn) {
+    if (fn) { undoFn = fn; wake(); }      // undo always arrives with the controls showing
+    pill.hidden = false; ditherEl(pill, false, 4000);
     clearTimeout(undoTimer); undoTimer = setTimeout(hideUndo, 4000);
   }
-  function hideUndo() { pill.hidden = true; pill.classList.remove('fading'); undoPrev = null; clearTimeout(undoTimer); }
-  pill.addEventListener('mouseenter', () => { pill.classList.remove('fading'); clearTimeout(undoTimer); });
-  pill.addEventListener('mouseleave', () => { if (undoPrev) showUndo(); });
-  pill.addEventListener('focus', () => { pill.classList.remove('fading'); clearTimeout(undoTimer); });
-  pill.addEventListener('blur', () => { if (undoPrev) showUndo(); });
-  pill.onclick = () => { if (!undoPrev) return; const p = undoPrev; hideUndo(); withStatic(() => { Object.assign(state, p); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }); };
+  function hideUndo() { pill.hidden = true; stopDither(pill); undoFn = null; clearTimeout(undoTimer); }
+  pill.addEventListener('mouseenter', () => { stopDither(pill); clearTimeout(undoTimer); });
+  pill.addEventListener('mouseleave', () => { if (undoFn) showUndo(); });
+  pill.addEventListener('focus', () => { stopDither(pill); clearTimeout(undoTimer); });
+  pill.addEventListener('blur', () => { if (undoFn) showUndo(); });
+  pill.onclick = () => { if (!undoFn) return; const f = undoFn; hideUndo(); f(); };
   function placeUndo() {
     return;      // positioned by CSS: centered, level with the dock
     const b = tankScreenBox(), vh = grid.rows * grid.chCss, oy = (window.innerHeight - vh) / 2;
@@ -2318,8 +2379,8 @@
 
   // ---- about: halftone glass with the name, credit and coffee
   const about = $('about');
-  function openAbout() { drawAboutEdge(); about.classList.add('on'); $('aboutBtn').setAttribute('aria-expanded', 'true'); setTimeout(() => $('aboutClose').focus(), 50); }
-  function closeAbout() { about.classList.remove('on'); $('aboutBtn').setAttribute('aria-expanded', 'false'); $('aboutBtn').focus(); }
+  function openAbout() { drawAboutEdge(); about.classList.add('on'); ditherEl(about, true, 420); $('aboutBtn').setAttribute('aria-expanded', 'true'); setTimeout(() => $('aboutClose').focus(), 50); }
+  function closeAbout() { $('aboutBtn').setAttribute('aria-expanded', 'false'); $('aboutBtn').focus(); ditherEl(about, false, 360, () => { about.classList.remove('on'); setMask(about, null); }); }
   // dots around the card, big at the edge and shrinking with distance: a glow made of halftone
   function drawAboutEdge() {
     const cv = $('aboutEdge'), card = cv.parentElement, pad = 48;
@@ -2349,7 +2410,8 @@
     state.seed = randomSeed(); state.growth = 0; state.evap = 0;
     state.shape = Math.random() < 0.35 ? 'oval' : 'box';       // most tanks are rectangular; about 1 in 3 comes up oval
     exitGrowthPreview();
-    withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }, () => showUndo(prev));      // undo's 4 seconds start once the new tank has filled in
+    withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); },
+      () => showUndo(() => withStatic(() => { Object.assign(state, prev); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); })));      // undo's 4 seconds start once the new tank has filled in
   }
   // the haze shell: the tank's own outline, a hair outside the glass, from under the base to above the rim
   const HAZE_VERT = /* glsl */`void main() { gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); }`;
@@ -2420,10 +2482,7 @@
   ['mouseenter', 'focus'].forEach((ev) => $('timerHit').addEventListener(ev, () => { hovering = true; }));
   ['mouseleave', 'blur'].forEach((ev) => $('timerHit').addEventListener(ev, () => { hovering = false; }));
 
-  $('resetAsk').onclick = askReset;
-  $('resetYes').onclick = () => { timerReset(); $('live').textContent = 'Timer reset.'; };
-  $('resetNo').onclick = () => { cancelReset(); setTimeout(() => $('resetAsk').focus(), 30); };
-  window.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && confirmReset) cancelReset(); });
+  $('trashBtn').onclick = trashTimer;
   $('addPom').onclick = () => { completePom(false); revealFish(); };
   // testing: jump to 3 seconds before the end of whichever phase is next
   $('endSoon').onclick = () => {
@@ -2587,6 +2646,23 @@
     }
     drag = null;
   };
+  const touchPts = new Map(); let pinch = null;
+  const spread = () => { const [a, b] = [...touchPts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+  canvas.addEventListener('pointerdown', (ev) => {
+    touchPts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (touchPts.size === 2) {
+      if (drag && drag.active) { state.view = Math.round(state.view / 90) * 90; state.dragging = false; document.body.classList.remove('dragging'); }
+      drag = null; pinch = { d0: spread(), z0: state.zoomTarget }; suppressClick = true;
+    }
+  });
+  canvas.addEventListener('pointermove', (ev) => {
+    if (!touchPts.has(ev.pointerId)) return;
+    touchPts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pinch && touchPts.size >= 2) state.zoomTarget = clamp(pinch.z0 * pinch.d0 / spread(), 0.55, 1.3);     // fingers apart = closer
+  });
+  const endTouch = (ev) => { touchPts.delete(ev.pointerId); if (touchPts.size < 2 && pinch) { pinch = null; setTimeout(() => { suppressClick = false; }, 250); } };
+  canvas.addEventListener('pointerup', endTouch); canvas.addEventListener('pointercancel', endTouch);
+  ['gesturestart', 'gesturechange'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));     // Safari: don't zoom the page
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('mousemove', (ev) => {
@@ -2630,10 +2706,19 @@
   window.addEventListener('pointermove', () => { keyboardUser = false; }, { passive: true });
   const busy = () => overControls || about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging
     || (keyboardUser && !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.dock, .undo-wrap, .drawer')));
-  function goIdle() { if (busy()) { idleTimer = setTimeout(goIdle, 1000); return; } document.body.classList.add('idle'); }
+  const idleEls = () => [...document.querySelectorAll('.dock, .undo-wrap, .tune')];
+  function goIdle() {
+    if (busy()) { idleTimer = setTimeout(goIdle, 1000); return; }
+    idleEls().forEach((el) => ditherEl(el, false, 520));
+    setTimeout(() => { if (!document.body.classList.contains('idle-pending')) return; document.body.classList.remove('idle-pending'); document.body.classList.add('idle'); idleEls().forEach((el) => setMask(el, null)); }, 540);
+    document.body.classList.add('idle-pending');
+  }
   function wake(ev) {
     if (ev && ev.type === 'mousemove' && ev.movementX === 0 && ev.movementY === 0) return;      // a page repaint isn't a person moving
-    document.body.classList.remove('idle'); clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, IDLE_MS);
+    const b = document.body, was = b.classList.contains('idle') || b.classList.contains('idle-pending');
+    b.classList.remove('idle', 'idle-pending');
+    if (was) idleEls().forEach((el) => ditherEl(el, true, 220));
+    clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, IDLE_MS);
   }
   ['mousemove', 'mousedown', 'focusin', 'touchstart', 'wheel', 'keydown'].forEach((ev) => window.addEventListener(ev, wake, { passive: true }));
   document.querySelectorAll('.dock, .undo-wrap, .tune, .drawer').forEach((el) => { el.addEventListener('mouseenter', () => { overControls = true; }); el.addEventListener('mouseleave', () => { overControls = false; }); });
@@ -2674,7 +2759,7 @@
     U.uWater.value += (TANK.h * (0.955 - 0.012 * clamp(ev, 0, MAX_POMS)) - U.uWater.value) * (1 - Math.exp(-dt * 1.2));
     const glowT = hovering ? 1 : waiting ? 0.25 + 0.25 * Math.sin(t * 1.1) : 0;
     asciiU.uOverlayGlow.value += (glowT - asciiU.uOverlayGlow.value) * (1 - Math.exp(-dt * 5));
-    stepStatic(dtReal);
+    stepStatic(dtReal); stepTimerDither(dtReal);
     if (hazeMesh) hazeMesh.visible = U.uStatic.value > 0.002;
     U.uGlow.value += (glowTarget - U.uGlow.value) * (1 - Math.exp(-dt * 1.8));
     if (glowMesh) glowMesh.visible = U.uGlow.value > 0.01;
@@ -2727,6 +2812,7 @@
     foundScreen() { if (!found) return null; const p = found.root.position.clone().add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
     setZoom(z) { state.zoom = state.zoomTarget = z; },
     slow(f) { timeScale = f; },
+    ditherPeek(sel, k) { const el = document.querySelector(sel); el._dither = (el._dither || 0) + 1; setMask(el, k); },
     manual() { manualMode = true; fakeNow = performance.now(); lastSim = fakeNow; },
     tick(dt) { fakeNow += dt * 1000; renderFrame(fakeNow); },
     setTransStyle(i) { transStyle = i; },
