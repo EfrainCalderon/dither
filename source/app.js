@@ -1,5 +1,5 @@
 /*
-  Dither 1.1
+  Dither 1.2
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -165,19 +165,26 @@
     growthPreview: null, skyPreview: null,
   };
   let saveTimer = 0;
+  function writeSave() {
+    clearTimeout(saveTimer); saveTimer = 0;
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        seed: state.seed, shape: state.shape, name: state.name, sound: state.sound,
+        growth: state.growth, evap: state.evap, fish: state.fish, pendingFish: state.pendingFish, fishDay: state.fishDay, timer: state.timer,
+        wordsStyle: state.wordsStyle, baseOn: state.baseOn, brain: state.brain, musicVol: state.musicVol, musicMuted: state.musicMuted,
+      }));
+    } catch (e) { /* storage blocked: still works, just won't remember */ }
+  }
+  // saves are bunched up for a moment, but written right away if the page is hidden or closed, so a quick pause-and-close sticks
   function save() {
     setEndAlarm();          // every timer change is saved, so this keeps the end-of-session alarm in step
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try {
-        localStorage.setItem(STORE_KEY, JSON.stringify({
-          seed: state.seed, shape: state.shape, name: state.name, sound: state.sound,
-          growth: state.growth, evap: state.evap, fish: state.fish, pendingFish: state.pendingFish, fishDay: state.fishDay, timer: state.timer,
-          wordsStyle: state.wordsStyle, baseOn: state.baseOn, brain: state.brain, musicVol: state.musicVol, musicMuted: state.musicMuted,
-        }));
-      } catch (e) { /* storage blocked: still works, just won't remember */ }
-    }, 300);
+    saveTimer = setTimeout(writeSave, 300);
   }
+  const flushSave = () => { if (saveTimer) writeSave(); };
+  window.addEventListener('pagehide', flushSave);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+  const readSaved = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { return null; } };
 
   // ================================================================ helpers
   function randomSeed() { return Math.random().toString(36).slice(2, 10).toUpperCase(); }
@@ -2140,9 +2147,12 @@
   function tickTimer() {
     const tm = state.timer;
     if (tm.mode.endsWith('-run') && remaining() <= 0) {
-      if (tm.mode === 'focus-run') { state.timer = { mode: 'focus-done', endsAt: 0, remaining: 0 }; completePom(true); updateTimerActions(); placeTimerActions(); }
-      else { state.timer = { mode: 'rest-done', endsAt: 0, remaining: 0 }; bell('rest-done'); $('live').textContent = 'Rest is over. Start focusing when you are ready.'; }
-      save();
+      // with Dither open in two tabs, both reach 0:00: the first one counts the session, the other takes its result
+      const other = readSaved();
+      if (other && other.timer && other.timer.from === tm.endsAt) { adoptSaved(other); return; }
+      if (tm.mode === 'focus-run') { state.timer = { mode: 'focus-done', endsAt: 0, remaining: 0, from: tm.endsAt }; completePom(true); updateTimerActions(); placeTimerActions(); }
+      else { state.timer = { mode: 'rest-done', endsAt: 0, remaining: 0, from: tm.endsAt }; bell('rest-done'); $('live').textContent = 'Rest is over. Start focusing when you are ready.'; }
+      save(); writeSave();
     }
     renderTimerText();
   }
@@ -2154,7 +2164,7 @@
     const now = performance.now(), dt = Math.min(2, (now - lastBeat) / 1000); lastBeat = now;
     tickTimer();
     if (document.hidden) musicTick(dt);       // when the tab is visible, the render loop does this every frame
-    syncPlayBtn();
+    syncPlayBtn(); syncWakeLock();
   }
   function setEndAlarm() {
     clearTimeout(endAlarm);
@@ -2163,6 +2173,39 @@
   }
   setInterval(heartbeat, 1000);
   document.addEventListener('visibilitychange', heartbeat);
+
+  // keep the screen on while a session runs, so a phone on the desk doesn't dim and lock mid-focus.
+  // Paused, idle or in another tab, the lock is let go and the phone sleeps as usual.
+  let wakeLock = null;
+  function syncWakeLock() {
+    if (!navigator.wakeLock) return;
+    const want = state.timer.mode.endsWith('-run') && !document.hidden;
+    if (want && !wakeLock) {
+      wakeLock = 'asking';
+      navigator.wakeLock.request('screen').then((lock) => {
+        wakeLock = lock;
+        lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+      }).catch(() => { wakeLock = null; });
+    } else if (!want && wakeLock && wakeLock !== 'asking') { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+
+  // two tabs: when the other one saves a change, take it on here too (without saving it back)
+  function adoptSaved(o) {
+    if (!o || !o.timer || o.fishDay !== state.fishDay) return;
+    const timerChanged = JSON.stringify(o.timer) !== JSON.stringify(state.timer);
+    state.timer = o.timer; state.growth = o.growth ?? state.growth; state.evap = o.evap ?? state.evap;
+    const fishChanged = (o.fish || []).length !== state.fish.length || (o.pendingFish || 0) !== state.pendingFish;
+    state.fish = o.fish || []; state.pendingFish = o.pendingFish || 0;
+    if (fishChanged) syncFish();
+    if (o.seed && (o.seed !== state.seed || o.shape !== state.shape)) { state.seed = o.seed; if (SHAPES[o.shape]) state.shape = o.shape; generate(state.seed); updateDrawer(); }
+    if (!!o.brain !== !!state.brain) { state.brain = !!o.brain; if (state.brain) makeBrain(false); else brainLeave(); syncBrainUI(); }
+    if (typeof o.musicVol === 'number') { state.musicVol = o.musicVol; state.musicMuted = o.musicMuted === true; syncVolUI(); }
+    if (timerChanged) { clearTimeout(endAlarm); if (state.timer.mode.endsWith('-run')) endAlarm = setTimeout(heartbeat, Math.max(0, state.timer.endsAt - Date.now()) + 50); renderTimerText(true); }
+  }
+  window.addEventListener('storage', (ev) => {
+    if (ev.key !== STORE_KEY || !ev.newValue) return;
+    try { adoptSaved(JSON.parse(ev.newValue)); } catch (e) { /* not ours to read */ }
+  });
   function announce() {
     const tm = state.timer, hit = $('timerHit');
     const label = (tm.mode === 'idle' && dayOver()) ? 'Dither. Show the start focus button' : (tm.mode === 'idle' || tm.mode === 'rest-done') ? 'Start a 25 minute focus session' : tm.mode === 'focus-done' ? 'Rest up: start a 5 minute rest' : tm.mode.endsWith('-run') ? `Pause timer, ${fmt(remaining())} left` : `Resume timer, ${fmt(remaining())} left`;
@@ -2179,31 +2222,6 @@
     const isRest = tm.mode.startsWith('rest');
     const paused = tm.mode.endsWith('-pause');
     return { label: paused ? 'paused' : isRest ? 'rest' : '', big: fmt(rem), dim: paused ? 0.6 : 1 };
-  }
-  function drawTimerOld(ctx, w, h, sx, label, big, halo) {
-    // sx = horizontal scale (so text keeps its shape on non-square cells)
-    // halo: draw a thick outline in green first; the fill is red. The water shader turns the
-    // outline into a darker ring of water so the numbers stay readable over rocks and plants.
-    ctx.clearRect(0, 0, w, h);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
-    const ink = (fn) => { if (halo) { ctx.strokeStyle = '#00ff00'; ctx.lineWidth = h * 0.07; fn((t, x, y) => ctx.strokeText(t, x, y)); } ctx.fillStyle = halo ? '#ff0000' : '#ffffff'; fn((t, x, y) => ctx.fillText(t, x, y)); };
-    const bigSize = h * (label ? 0.5 : 0.62);
-    ctx.save(); ctx.translate(w / 2, 0); ctx.scale(sx, 1);
-    ctx.font = `800 ${bigSize}px ${FONT_UI}`;
-    if (/\d/.test(big)) {
-      // fixed-width slots so the digits don't jiggle as they change
-      const slot = bigSize * 0.62, colon = bigSize * 0.32;
-      const widths = big.split('').map((c) => (c === ':' ? colon : slot));
-      const total = widths.reduce((a, b) => a + b, 0);
-      let x = -total / 2;
-      const xs = widths.map((wd) => { const c = x + wd / 2; x += wd; return c; });
-      ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], h * 0.94)));
-    } else {
-      ctx.font = `700 ${bigSize * 0.92}px ${FONT_UI}`;
-      ink((draw) => draw(big, 0, h * 0.86));
-    }
-    if (label) { ctx.font = `800 ${h * 0.36}px ${FONT_UI}`; if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(h * 0.02)}px`; ink((draw) => draw(label, 0, h * 0.34)); if ('letterSpacing' in ctx) ctx.letterSpacing = '0px'; }
-    ctx.restore();
   }
   // fill is drawn in red; a soft blurred copy in green is the glow the screen shows on hover
   let digitDrop = 0;
@@ -2436,12 +2454,6 @@
   pill.addEventListener('focus', () => { pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); });
   pill.addEventListener('blur', () => { if (undoFn) showUndo(); });
   pill.onclick = () => { if (!undoFn || staticAnim || timerAnim) return; const f = undoFn; hideUndo(); f(); };
-  function placeUndo() {
-    return;      // positioned by CSS: centered, level with the dock
-    const b = tankScreenBox(), vh = grid.rows * grid.chCss, oy = (window.innerHeight - vh) / 2;
-    const top = Math.round(Math.min(window.innerHeight - 64, oy + (1 - (b.y0 * 0.5 + 0.5)) * vh + 22));
-    if (Math.abs(top - (pill._top || 0)) >= 3) { pill._top = top; pill.style.top = `${top}px`; }
-  }
 
   // ---- about: halftone glass with the name, credit and coffee
   const about = $('about');
@@ -2616,14 +2628,19 @@
   function loadBuffer(k) {
     if (music.buf[k] || music.loading[k]) return;
     const ctx = audio(); if (!ctx) return;
-    music.loading[k] = fetch(TRACKS[k]).then((r) => r.arrayBuffer()).then((ab) => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej))).then((buf) => {
+    music.loading[k] = fetch(TRACKS[k]).then((r) => { if (!r.ok) throw new Error(`${TRACKS[k]}: ${r.status}`); return r.arrayBuffer(); }).then((ab) => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej))).then((buf) => {
       // find where the sound actually starts and ends: MP3 encoders pad both ends with silence, which would click the loop
       const d = buf.getChannelData(0), eps = 1e-4; let a = 0, b = d.length - 1;
       while (a < 8192 && Math.abs(d[a]) < eps) a++;
       while (b > d.length - 8192 && Math.abs(d[b]) < eps) b--;
       music.buf[k] = { buf, start: a / buf.sampleRate, end: (b + 1) / buf.sampleRate };
       if (music.playing[k]) startSource(k);
-    }).catch(() => { music.loading[k] = null; });
+    }).catch((err) => {
+      // couldn't fetch or decode it: say so in the console and try again in a few seconds while it's still wanted
+      console.warn('Dither music did not load', err);
+      music.loading[k] = null;
+      setTimeout(() => { if (music.playing[k]) loadBuffer(k); }, 5000);
+    });
   }
   function gainFor(k) {
     const ctx = audio(); if (!ctx) return null;
@@ -3003,7 +3020,7 @@
   window.addEventListener('keydown', (ev) => {
     if ((ev.target.tagName === 'INPUT' && ev.target.type === 'range') || ev.target.isContentEditable) return;
     if (/^[a-z]$/i.test(ev.key) && ev.key.toLowerCase() !== 'i') return;
-    if (ev.key === ' ' && ev.target.tagName !== 'BUTTON') { ev.preventDefault(); timerPress(); }
+    if (ev.key === ' ' && !(ev.target.closest && ev.target.closest('button, a, input, select, textarea, [role="button"]'))) { ev.preventDefault(); timerPress(); }
     else if (ev.key === 'ArrowLeft') turn(-1);
     else if (ev.key === 'ArrowRight') turn(1);
     else if (ev.key.toLowerCase() === 'i' && document.body.classList.contains('admin')) document.body.classList.toggle('show-stats');
@@ -3107,7 +3124,7 @@
     const azr = T.MathUtils.degToRad(state.az), dz = (terrain ? shape.b : 20) * 0.28;
     digitMesh.position.x = Math.sin(azr) * dz; digitMesh.position.z = Math.cos(azr) * dz; digitMesh.rotation.y = azr;
     world.updateMatrixWorld();
-    placeTimerHit(); placeUndo(); placeTimerActions();
+    placeTimerHit(); placeTimerActions();
     const t0 = performance.now();
     renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
     renderer.setRenderTarget(null); renderer.render(quadScene, quadCam);
