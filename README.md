@@ -6,7 +6,7 @@ A Pomodoro timer that lives in a tiny halftone aquarium. Finish a focus session,
 - **The tank grows with you.** Each session moves it along: moss creeps, carpets fill in, stems reach out of the water, the water slowly evaporates.
 - **The sky is real.** It follows the sun and moon where you are. At night the base lights up (click the base to turn it off).
 - **Play with it.** Drag to turn the tank, click the fish, and keep an eye out for rare things on the sand.
-- **New tank** rolls a fresh layout. Undo is there for 4 seconds.
+- **New tank** rolls a fresh layout. Undo is there for 3 seconds.
 - **Music** loops under focus and rest, fading in and out with the timer. Volume and mute sit bottom right.
 - **Call it a day** appears when a focus session ends, next to "rest up". It drops a giant brain into the tank and leaves just the title, so you can explore with no timer asking for anything. Click the title to bring back "start focus". It never shows during focus.
 
