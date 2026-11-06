@@ -77,6 +77,9 @@
   /* ---------- undo: centered, level with the dock; fades away in 4 seconds */
   .undo-wrap { position: fixed; z-index: 5; left: 50%; bottom: calc(12px + 11px * var(--ui) + env(safe-area-inset-bottom)); transform: translateX(-50%); }
   .undo[hidden] { display: none; }
+  @media (max-width: 640px) {      /* phones: undo goes bottom-right, clear of the icons on the left */
+    .undo-wrap { left: auto; right: calc(14px + env(safe-area-inset-right)); transform: none; }
+  }
 
   /* ---------- about: a black card whose edge glows in halftone dots; nothing blurred behind it */
   .about { position: fixed; inset: 0; z-index: 7; display: grid; place-items: center; background: transparent; visibility: hidden; pointer-events: none; }
