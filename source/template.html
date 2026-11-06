@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dither</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /*__FONTS__*/
+  :root {
+    --ink: #eef5f3;
+    --ink-dim: rgba(238, 245, 243, 0.68);
+    --line: rgba(238, 245, 243, 0.22);
+    --chip: rgba(8, 14, 22, 0.42);
+    --glow: #ffffff;
+    --accent: #9fe3d8;
+    --shadow: none;
+    --ui: 1;              /* the bottom controls scale with the window (set in code, never below ~0.78) */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0a0f18; overflow: hidden; }
+  body { font: 13px/1.35 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  #c { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; cursor: default; }
+  #c.edge-l { cursor: w-resize; } #c.edge-r { cursor: e-resize; } #c.water, #c.base { cursor: pointer; } #c.grab { cursor: grab; }
+  body.idle #c, body.idle #timerHit { cursor: none; }
+  body.dragging, body.dragging #c { cursor: grabbing !important; }
+  button { font: inherit; color: var(--ink); cursor: pointer; }
+  button:focus-visible, input:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- halftone: real text and icons, painted with a dot pattern */
+  .ht-text { color: transparent; background-image: radial-gradient(circle, var(--ink) 1.05px, transparent 1.35px); background-size: 2.5px 2.5px;
+             -webkit-background-clip: text; background-clip: text; font-weight: 800; }
+  .ht-icon { display: block; width: var(--s); height: var(--s); background-image: radial-gradient(circle, var(--ink) 1.15px, transparent 1.5px); background-size: 2.6px 2.6px;
+             -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; transition: transform 250ms ease; }
+  .ht-halo { position: absolute; left: 50%; top: 50%; width: calc(var(--s) * 1.5); height: calc(var(--s) * 1.5); transform: translate(-50%, -50%);
+             background-image: radial-gradient(circle, var(--glow) 1.0px, transparent 1.4px); background-size: 2.6px 2.6px;
+             -webkit-mask: var(--mb) center / contain no-repeat; mask: var(--mb) center / contain no-repeat; opacity: 0; transition: opacity 350ms ease; pointer-events: none; }
+  .icon-btn { --s: calc(46px * var(--ui)); position: relative; width: calc(66px * var(--ui)); height: calc(66px * var(--ui)); padding: 0; border: 0; background: none; border-radius: 18px; display: grid; place-items: center; }
+  .icon-btn:hover .ht-halo, .icon-btn:focus-visible .ht-halo { opacity: 1; }
+  .icon-btn:hover .ht-icon, .icon-btn:focus-visible .ht-icon { transform: scale(1.06); }
+  .icon-btn:focus-visible { outline: none; }
+  .tip { position: absolute; left: 50%; bottom: calc(100% - 2px); transform: translate(-50%, 6px); white-space: nowrap; font-size: calc(17px * var(--ui)); line-height: 1; padding: 4px 2px;
+         opacity: 0; pointer-events: none; transition: opacity 200ms ease, transform 200ms ease; }
+  .icon-btn:hover .tip, .icon-btn:focus-visible .tip { opacity: 1; transform: translate(-50%, 0); }
+  .dock .icon-btn:first-child .tip { left: calc(33px * var(--ui)); }
+
+  /* the timer is drawn in the scene; this invisible button sits on top of it */
+  #timerHit { position: fixed; z-index: 3; background: transparent; border: 0; border-radius: 12px; padding: 0; }
+  #timerHit:focus-visible { outline: none; }
+
+  .dock { position: fixed; z-index: 4; left: 14px; bottom: 12px; display: flex; gap: calc(24px - 10px * var(--ui)); align-items: center; }
+  .dock, .undo-wrap, .tune { transition: opacity 450ms ease; }
+  body.idle .dock, body.idle .undo-wrap, body.idle .tune { opacity: 0; pointer-events: none; }
+  body:not(.idle) .dock, body:not(.idle) .undo-wrap { transition-duration: 160ms; }
+
+  /* ---------- ghost buttons: an outline, halftone words and icon */
+  .ghost { position: relative; display: inline-flex; align-items: center; gap: calc(9px * var(--ui)); height: calc(44px * var(--ui)); padding: 0 calc(20px * var(--ui)) 0 calc(15px * var(--ui)); border-radius: 999px;
+           border: 1.5px solid var(--ink); background: transparent; transition: background-color 200ms ease, transform 200ms ease; }
+  .ghost:hover, .ghost:focus-visible { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+  .ghost:active { transform: scale(0.97); }
+  .ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 70%, transparent); }
+  .ghost .ht-icon { --s: calc(24px * var(--ui)); }
+  .ghost .ht-halo { --s: calc(24px * var(--ui)); left: calc(27px * var(--ui)); }
+  .ghost:hover .ht-halo, .ghost:focus-visible .ht-halo { opacity: 1; }
+  .ghost:hover .ht-icon { transform: rotate(-8deg) scale(1.06); }
+  .ghost .ht-text { font-size: calc(18px * var(--ui)); line-height: 1; }
+
+  /* ---------- undo: centered, level with the dock; fades away in 4 seconds */
+  .undo-wrap { position: fixed; z-index: 5; left: 50%; bottom: calc(12px + 11px * var(--ui)); transform: translateX(-50%); }
+  .undo.fading { opacity: 0; transition: opacity 4s linear; }
+  .undo[hidden] { display: none; }
+
+  /* ---------- about: a black card whose edge glows in halftone dots; nothing blurred behind it */
+  .about { position: fixed; inset: 0; z-index: 7; display: grid; place-items: center; background: transparent; opacity: 0; pointer-events: none; transition: opacity 300ms ease; }
+  .about.on { opacity: 1; pointer-events: auto; }
+  .glass { --ink: var(--card-ink, #143650); --line: color-mix(in srgb, var(--ink) 30%, transparent);
+           position: relative; width: min(500px, calc(100vw - 32px)); padding: 46px 40px 38px; border-radius: 34px; display: grid; gap: 18px; justify-items: center; text-align: center;
+           background: var(--card-bg, #8fbde6); transform: translateY(10px) scale(0.98); transition: transform 350ms ease, background-color 3s ease; }
+  .about.on .glass { transform: none; }
+  .glass .edge { position: absolute; left: -48px; top: -48px; width: calc(100% + 96px); height: calc(100% + 96px); pointer-events: none; z-index: -1; opacity: 0; transition: opacity 600ms ease 120ms; }
+  .about.on .glass .edge { opacity: 1; }
+  .glass .close { position: absolute; right: 10px; top: 10px; --s: 22px; width: 44px; height: 44px; }
+  .title { margin: 0; font-size: 52px; line-height: 1.05; letter-spacing: -0.01em; }
+  .line { margin: 0; font-size: 22px; }
+  .line a { text-decoration: none; box-shadow: inset 0 -2px 0 var(--line); }
+  .line a:hover { box-shadow: inset 0 -2px 0 var(--ink-dim); }
+  .coffee { position: relative; display: inline-flex; align-items: center; gap: 10px; padding: 10px 20px 10px 16px; border-radius: 999px; text-decoration: none; font-size: 22px;
+            background: color-mix(in srgb, var(--ink) 8%, transparent); transition: background-color 220ms ease, transform 220ms ease, box-shadow 220ms ease; }
+  .coffee .ht-icon, .coffee .ht-halo { --s: 30px; }
+  .coffee .ht-halo { left: 31px; opacity: 1; }
+  .coffee::after { content: ''; position: absolute; inset: -14px; border-radius: 999px; pointer-events: none; opacity: 0; transition: opacity 250ms ease;
+                   background-image: radial-gradient(circle, var(--glow) 1px, transparent 1.35px); background-size: 3.2px 3.2px;
+                   -webkit-mask: radial-gradient(closest-side, transparent 62%, #000 72%, transparent 100%); mask: radial-gradient(closest-side, transparent 62%, #000 72%, transparent 100%); }
+  .coffee:hover, .coffee:focus-visible { background: color-mix(in srgb, var(--ink) 20%, transparent); transform: scale(1.05); }
+  .coffee:hover::after, .coffee:focus-visible::after { opacity: 1; }
+  .coffee:hover .ht-halo, .coffee:focus-visible .ht-halo { --s: 38px; }
+  .coffee:hover .ht-icon, .coffee:focus-visible .ht-icon { animation: steam 900ms ease-in-out infinite alternate; }
+  @keyframes steam { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-2px) rotate(4deg); } }
+  .coffee:focus-visible { outline: none; }
+
+  /* ---------- timer words as real type (prototype option) */
+  .words { position: fixed; z-index: 2; pointer-events: none; display: none; color: var(--tink, #143650); text-align: center; }
+  body.words-type .words { display: block; }
+  .words .big { position: absolute; left: 0; right: 0; line-height: 1; }
+  .words .lab { position: absolute; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 0.38em; line-height: 1; letter-spacing: 0.04em; }
+  .words .play { width: 0.62em; height: 0.7em; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); flex: none; }
+  .words.glow { text-shadow: 0 0 10px var(--tglow, #fff), 0 0 2px var(--tglow, #fff); }
+  .words.glow .play { filter: drop-shadow(0 0 5px var(--tglow, #fff)); }
+  .words.dim { opacity: 0.6; }
+  .words.geist { font-family: 'Geist Mono', ui-monospace, monospace; }
+  .words.geist .lab { font-weight: 500; } .words.geist .big { font-weight: 700; letter-spacing: -0.02em; }
+  .words.doto { font-family: 'Doto', ui-monospace, monospace; font-variation-settings: 'ROND' 100; }
+  .words.doto .lab { font-weight: 900; } .words.doto .big { font-weight: 900; }
+
+  /* ---------- prototype drawer (temporary) */
+  .tune { position: fixed; z-index: 4; right: 16px; bottom: 16px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip);
+          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-size: 12px; transition: opacity 700ms; }
+  body:not(.admin) .tune, body:not(.admin) .drawer { display: none !important; }
+  .tune.on { background: rgba(159, 227, 216, 0.22); }
+  .drawer { --ink: #eef5f3; --ink-dim: rgba(238,245,243,.68); --line: rgba(238,245,243,.22); color: var(--ink);
+            position: fixed; z-index: 5; right: 16px; bottom: 56px; width: 310px; padding: 14px; border-radius: 16px; display: none; gap: 13px;
+            background: rgba(8, 14, 22, 0.66); border: 1px solid var(--line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  .drawer.on { display: grid; }
+  .drawer h2 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-dim); }
+  .drawer button { height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.06); font-size: 12px; }
+  .drawer button.on { background: rgba(159, 227, 216, 0.22); border-color: rgba(159, 227, 216, 0.6); }
+  .field { display: grid; gap: 6px; }
+  .field .top { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-dim); font-size: 12px; }
+  .field .top b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .row input[type=range] { flex: 1; accent-color: var(--accent); min-width: 0; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .drawer .seg button { flex: 1; border: 0; border-radius: 0; background: transparent; }
+  .seg button[aria-pressed="true"] { background: rgba(159, 227, 216, 0.22) !important; }
+  select { flex: 1; min-width: 0; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--ink); font: inherit; font-size: 12px; padding: 0 8px; }
+  select option, select optgroup { background: #0d1620; color: #eef5f3; }
+  .check { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .stats { position: fixed; right: 20px; top: 16px; font: 11px ui-monospace, Menlo, monospace; color: var(--ink-dim); display: none; text-align: right; }
+  body.show-stats .stats { display: block; }
+  @media (prefers-reduced-motion: reduce) { .about, .glass { transition: none; } .coffee:hover .ht-icon { animation: none; } }
+</style>
+</head>
+<body>
+<canvas id="c" aria-hidden="true"></canvas>
+<button id="timerHit" aria-label="Start a 25 minute focus session"></button>
+
+<div class="dock" role="toolbar" aria-label="Tank">
+  <button class="icon-btn" id="aboutBtn" aria-label="About" aria-haspopup="dialog"><span class="ht-halo"></span><span class="ht-icon" data-icon="info"></span><span class="tip ht-text" aria-hidden="true">about</span></button>
+  <button class="ghost" id="rescapeBtn"><span class="ht-halo"></span><span class="ht-icon" data-icon="dice"></span><span class="ht-text">new tank</span></button>
+</div>
+
+<div class="undo-wrap"><button class="ghost undo" id="undoPill" hidden><span class="ht-halo"></span><span class="ht-icon" data-icon="undo"></span><span class="ht-text">undo</span></button></div>
+
+<div class="about" id="about" role="dialog" aria-modal="true" aria-labelledby="appName">
+  <div class="glass">
+    <canvas class="edge" id="aboutEdge" aria-hidden="true"></canvas>
+    <button class="icon-btn close" id="aboutClose" aria-label="Close"><span class="ht-halo"></span><span class="ht-icon" data-icon="close"></span></button>
+    <h1 class="ht-text title" id="appName">Dither</h1>
+    <p class="line"><span class="ht-text">created by </span><a class="ht-text" href="https://www.efrain.design" target="_blank" rel="noopener">Efrain Calderon</a></p>
+    <a class="coffee" href="https://www.buymeacoffee.com/efrainfm" target="_blank" rel="noopener"><span class="ht-halo"></span><span class="ht-icon" data-icon="coffee"></span><span class="ht-text">buy me a coffee</span></a>
+  </div>
+</div>
+
+<button class="tune" id="tune" aria-expanded="false" aria-controls="drawer">admin</button>
+<div class="drawer" id="drawer" role="region" aria-label="Admin controls">
+  <h2>Admin · type “Pynchon” again to hide</h2>
+  <div class="field">
+    <div class="top"><label for="growth">Tank time</label><b id="growthVal">0 poms</b></div>
+    <div class="row"><input id="growth" type="range" min="0" max="10" step="0.05" value="0"><button id="growthNow" class="on">now</button></div>
+  </div>
+  <div class="field">
+    <div class="top"><label for="sky">Sky</label><b id="skyVal">—</b></div>
+    <div class="row"><input id="sky" type="range" min="0" max="24" step="0.05" value="12"><button id="skyNow" class="on">now</button></div>
+  </div>
+  <div class="row"><button id="addPom">+1 pom</button><button id="endSoon">end timer in 3s</button><button id="resetTimer">reset</button></div>
+  <div class="field">
+    <div class="top"><span>Fish today</span><b id="fishVal">0</b></div>
+    <div class="row"><button id="resetFish">reset fish to 0</button></div>
+  </div>
+  <div class="field">
+    <div class="top"><label for="findSel">Found object</label><b id="findVal">none</b></div>
+    <div class="row"><select id="findSel"></select><button id="findPlace">place</button></div>
+  </div>
+  <div class="field"><div class="top"><span>Timer words</span></div>
+    <div class="seg" id="wordsSeg" role="group" aria-label="Timer words"></div></div>
+  <div class="field"><div class="top"><span>Base light</span><b id="baseVal">auto</b></div>
+    <div class="row"><button id="baseAuto">back to auto</button></div></div>
+  <div class="field"><div class="top"><span>Shape</span></div>
+    <div class="seg" id="shapeSeg" role="group" aria-label="Tank shape"></div></div>
+  <label class="check">Sound <input type="checkbox" id="sound"></label>
+</div>
+
+<div class="words" id="words" aria-hidden="true"><div class="big"></div><div class="lab"><span class="play"></span><span class="t"></span></div></div>
+<div class="sr" id="live" aria-live="polite"></div>
+<div class="stats" id="stats"></div>
+
+<script>/*__VENDOR__*/</script>
+<script>/*__APP__*/</script>
+</body>
+</html>
