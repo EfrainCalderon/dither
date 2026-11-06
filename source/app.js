@@ -2213,7 +2213,7 @@
   pill.addEventListener('mouseleave', () => { if (undoPrev) showUndo(); });
   pill.addEventListener('focus', () => { pill.classList.remove('fading'); clearTimeout(undoTimer); });
   pill.addEventListener('blur', () => { if (undoPrev) showUndo(); });
-  pill.onclick = () => { if (!undoPrev) return; const p = undoPrev; hideUndo(); withStatic(() => { Object.assign(state, p); generate(state.seed); save(); updateDrawer(); }); };
+  pill.onclick = () => { if (!undoPrev) return; const p = undoPrev; hideUndo(); withStatic(() => { Object.assign(state, p); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }); };
   function placeUndo() {
     return;      // positioned by CSS: centered, level with the dock
     const b = tankScreenBox(), vh = grid.rows * grid.chCss, oy = (window.innerHeight - vh) / 2;
@@ -2250,10 +2250,11 @@
   about.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeAbout(); } });
 
   function rescape() {
-    const prev = { seed: state.seed, growth: state.growth, evap: state.evap };
+    const prev = { seed: state.seed, growth: state.growth, evap: state.evap, shape: state.shape };
     state.seed = randomSeed(); state.growth = 0; state.evap = 0;
+    state.shape = Math.random() < 0.35 ? 'oval' : 'box';       // most tanks are rectangular; about 1 in 3 comes up oval
     exitGrowthPreview();
-    withStatic(() => { generate(state.seed); save(); updateDrawer(); showUndo(prev); });
+    withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); showUndo(prev); });
   }
   // the haze shell: the tank's own outline, a hair outside the glass, from under the base to above the rim
   const HAZE_VERT = /* glsl */`void main() { gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); }`;
@@ -2353,6 +2354,7 @@
     });
   }
   const shapeNames = Object.keys(SHAPES);
+  function syncShapeSeg() { const el = document.getElementById('shapeSeg'); if (el) [...el.children].forEach((c, j) => c.setAttribute('aria-pressed', String(shapeNames[j] === state.shape))); }
   seg('shapeSeg', shapeNames, shapeNames.indexOf(state.shape), (i) => { state.shape = shapeNames[i]; generate(state.seed); save(); });
   $('sound').checked = state.sound;
   $('sound').onchange = (ev) => { state.sound = ev.target.checked; save(); if (state.sound) bell('rest-done'); };
