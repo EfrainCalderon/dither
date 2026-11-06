@@ -1,5 +1,5 @@
 /*
-  Dither 1.3.1
+  Dither 1.3.2
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -3676,7 +3676,7 @@
   function startFollow(o, cine) {
     if (!o) return;
     if (!follow) follow = { back: state.zoomTarget };       // where to go back to afterwards
-    follow.o = o; follow.cine = !!cine; follow.swimAt = 0;
+    follow.o = o; follow.cine = !!cine;
     state.zoomTarget = zoomMin(); zoomRate = cine ? 1.4 : 2.2;
   }
   function endFollow(slow) {
@@ -3853,9 +3853,8 @@
       applySky(skyDate()); updateSkyLabel(); tickTimer();
     }
     simulate(dt, t);
-    // follow camera. A new koi's entrance holds the close-up a moment after it starts swimming, then drifts back out.
+    // follow camera: it stays on the fish (a new koi's entrance included) until you tap away, press Esc or zoom out
     if (follow && !fishObjs.includes(follow.o)) endFollow(false);
-    if (follow && follow.cine && follow.o.mode !== 'intro') { follow.swimAt = follow.swimAt || now; if (now - follow.swimAt > 2600) endFollow(true); }
     {
       const dist = baseDistance() * state.zoom, k = clamp((dist - CLOSE_DIST * 1.15) / (CLOSE_DIST * 2), 0, 1);
       camEl += ((4 + 9 * k * k * (3 - 2 * k)) - camEl) * 0.12;          // close in, the camera comes down level with the fish

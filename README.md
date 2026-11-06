@@ -2,7 +2,7 @@
 
 A Pomodoro timer that lives in a tiny halftone aquarium. Finish a focus session, earn a fish.
 
-- **Focus for 25 minutes.** When it ends, click **rest up**: a koi drops in from the sky and dives into the tank, and the camera rides along in close-up before easing back out. Fish reset at midnight.
+- **Focus for 25 minutes.** When it ends, click **rest up**: a koi drops in from the sky and dives into the tank, and the camera rides along in close-up and stays with it until you tap away, press Esc, or zoom out. Fish reset at midnight.
 - **The tank grows with you.** Each session moves it along: moss creeps, carpets fill in, stems reach out of the water, the water slowly evaporates.
 - **The sky is real.** It follows the sun and moon where you are. At night the base lights up (click the base to turn it off).
 - **The koi feel alive.** Their bodies bend as they swim, long fins trail and ripple, eyes look around and blink, gills and mouths move as they breathe, and some have puffy cheeks. Every so often they play: a chase, circling each other, follow the leader, coming up to the surface, nibbling the bottom, nose to nose.
