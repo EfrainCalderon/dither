@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.9
+  Dither — prototype 0.10
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -32,7 +32,7 @@
     beadA: 30, beadB: 31, ticket: 32, usb: 33, usbMetal: 34, pebble: 35, cowrie: 36,
     fishOrange: 40, fishRed: 41, fishWhite: 42, fishBlack: 43, fishGold: 44, fishBlue: 45, fishBronze: 46,
     base: 47, glow: 48, digit: 49, diverSuit: 50, glassDark: 51, paper: 52, shellPink: 53, floppy: 54,
-    masonBrass: 55, cdFace: 56, cdInk: 57, cdA: 58, cdB: 59, cdC: 60, drop: 61, haze: 62,
+    masonBrass: 55, cdFace: 56, cdInk: 57, cdA: 58, cdB: 59, cdC: 60, drop: 61, haze: 62, shade: 63,
   };
   const ROWS = 64;
 
@@ -150,7 +150,7 @@
     underlit: false,
     name: 'Dither',          // fixed now; no renaming
     wordsStyle: ['dots', 'geist', 'doto'].includes(saved.wordsStyle) ? saved.wordsStyle : 'dots',
-    baseOverride: saved.baseOverride || null,   // a click on the base: { on, night } until day/night flips
+    baseOn: saved.baseOn === true,             // off by default; a click on the base turns it on
     sound: saved.sound ?? true,
     growth: saved.growth ?? 0,
     evap: saved.evap ?? 0,
@@ -169,7 +169,7 @@
         localStorage.setItem(STORE_KEY, JSON.stringify({
           seed: state.seed, shape: state.shape, name: state.name, sound: state.sound,
           growth: state.growth, evap: state.evap, fish: state.fish, pendingFish: state.pendingFish, fishDay: state.fishDay, timer: state.timer,
-          wordsStyle: state.wordsStyle, baseOverride: state.baseOverride,
+          wordsStyle: state.wordsStyle, baseOn: state.baseOn,
         }));
       } catch (e) { /* storage blocked: still works, just won't remember */ }
     }, 300);
@@ -318,14 +318,27 @@
   `;
 
   const SCENE_FRAG = /* glsl */`
-    uniform float uTime, uWater, uLight, uCamDist, uGrowth, uGlow, uFlash, uMGlow, uBaseHover;
-    uniform vec3 uLightDir;
+    uniform float uTime, uWater, uLight, uCamDist, uGrowth, uGlow, uFlash, uMGlow, uBaseHover, uShade;
+    uniform vec3 uLightDir; uniform vec2 uShadeOff;
     varying vec3 vW; varying vec3 vN; varying float vMat; varying vec2 vDir; varying float vOrient;
     varying float vPhase; varying float vLum; varying float vViewZ; varying float vBirth;
     ${COMMON}
     void main() {
       if (vBirth > uGrowth + 0.0001) discard;
       int m = int(vMat + 0.5);
+      if (m == ${M.shade}) {
+        // the tank's shadow on the ground: its footprint, dragged away from the sun or moon
+        float sh = 0.0;
+        for (int i = 0; i < 9; i++) {
+          float t = float(i) / 8.0;
+          float d = shapeNorm(vW.xz - uShadeOff * t);
+          sh = max(sh, (1.0 - smoothstep(0.96, 1.12 + 0.35 * t, d)) * (1.0 - 0.55 * t));
+        }
+        sh *= uShade * (1.0 - 0.9 * uGlow);
+        if (sh < 0.04) discard;
+        gl_FragColor = vec4(sh, ${M.shade}.0 / 63.0, 0.0, 0.0);
+        return;
+      }
       vec3 N = normalize(vN + vec3(0.0, 1e-4, 0.0)); if (!gl_FrontFacing) N = -N;
       vec3 L = normalize(uLightDir);
       float diff = max(dot(N, L), 0.0);
@@ -563,6 +576,15 @@
           bg = mix(bg, uGlowCol, m * 0.75 * gg + 0.08 * gg);
         }
       }
+      // ground shadow: darker dots over the sky, bigger where the shadow is deeper
+      if (id == ${M.shade}) {
+        float sv = s.r;
+        float r = rMax * (0.3 + 0.7 * sqrt(sv));
+        float m = 1.0 - smoothstep(r - 0.8, r + 0.8, length(q));
+        float lb = dot(bg, vec3(0.2126, 0.7152, 0.0722));
+        vec3 c = bg * (0.5 + 0.18 * (1.0 - lb));
+        gl_FragColor = vec4(mix(bg, c, m * clamp(sv * 1.8, 0.0, 1.0)), 1.0); return;
+      }
       // haze: a dot in the sky's own color, a little lighter or darker, so the tank dissolves into its surroundings
       if (id == ${M.haze}) {
         float hv = s.r;
@@ -644,6 +666,7 @@
     uPointSize: { value: 1 }, uViewPx: { value: new T.Vector2(1, 1) }, uCamDist: { value: 100 },
     uRip: { value: Array.from({ length: 8 }, () => new T.Vector4(0, 0, -99, 0)) },
     uFlash: { value: 0 }, uMGlow: { value: 0 }, uBaseHover: { value: 0 }, uStatic: { value: 0 },
+    uShade: { value: 0 }, uShadeOff: { value: new T.Vector2(0, 6) },
     uFlow: { value: new T.Vector3(1, 0.2, 0.12) }, uLightDir: { value: new T.Vector3(-0.3, 1, 0.35) },
     uShape: { value: new T.Vector4(45, 20, 4, 0) }, uShapePh: { value: new T.Vector3() },
   };
@@ -1206,7 +1229,16 @@
         const y = bot - 0.05;
         [[a0, l0], [a1, l1], [b0, l0], [b0, l0], [a1, l1], [b1, l1]].forEach(([p, l]) => gb.v(V(p.x, y, p.z), UP, M.glow, 0, 0, null, Math.max(0.001, l)));
       }
-      // back in v0.7: lights up by itself at night (and toggles with a click on the base)
+      // the ground shadow's canvas: a wide flat disc just under the light pool
+      {
+        const sb = new Builder(), R0 = 3.2, y = bot - 0.12;
+        for (let k = 0; k < N; k++) {
+          const a = boundary((k / N) * Math.PI * 2, R0), b = boundary(((k + 1) % N / N) * Math.PI * 2, R0);
+          [V(0, y, 0), V(a.x, y, a.z), V(b.x, y, b.z)].forEach((p) => sb.v(p, UP, M.shade, 0, 0, null, 0.5));
+        }
+        const shadeMesh = new T.Mesh(sb.build(), sceneMat); shadeMesh.frustumCulled = false; world.add(shadeMesh);
+      }
+      // the base light: off unless you click the base
       glowMesh = new T.Mesh(gb.build(), sceneMat);
       glowMesh.frustumCulled = false; glowMesh.visible = false;
       world.add(glowMesh);
@@ -1880,16 +1912,9 @@
   }
   const nightSeed = (d) => { const x = new Date(d); if (x.getHours() < 12) x.setDate(x.getDate() - 1); return seedToInt(x.toDateString()); };
   let skyInfo = { elev: 0, dayF: 1, night: false }, glowTarget = 0;
-  function baseLit() {
-    const o = state.baseOverride;
-    if (o && o.night !== skyInfo.night) { state.baseOverride = null; save(); }
-    return state.baseOverride ? state.baseOverride.on : skyInfo.night;
-  }
-  function updateBaseLabel() {
-    const el = document.getElementById('baseVal'); if (!el) return;
-    const o = state.baseOverride, until = skyInfo.night ? 'morning' : 'dusk';
-    el.textContent = !o ? `auto · ${skyInfo.night ? 'on' : 'off'}` : `${o.on ? 'on' : 'off'} until ${until}`;
-  }
+  function baseLit() { return state.baseOn; }
+  function updateBaseLabel() { const el = document.getElementById('baseVal'); if (el) el.textContent = state.baseOn ? 'on' : 'off'; }
+
   function applySky(date) {
     const sp = sunPos(date), mp = moonPos(date);
     const elev = sp.alt / rad, rising = sunPos(new Date(date.getTime() + 600000)).alt > sp.alt;
@@ -1908,6 +1933,12 @@
     const useMoon = dayF < 0.3 && malt > 0;
     const az = useMoon ? mp.az : sp.az, alt = Math.max(useMoon ? mp.alt : sp.alt, 0.35);
     U.uLightDir.value.set(Math.sin(az) * Math.cos(alt) * 0.9, Math.sin(alt), 0.45).normalize();
+    {
+      const L = U.uLightDir.value, lowness = 1 / Math.max(L.y, 0.22);
+      U.uShadeOff.value.set(clamp(-L.x * lowness * TANK.h * 0.55, -38, 38), 4 + 5 * clamp(1 - L.y, 0, 1));
+      const sunUp = smooth(-2, 12, elev), moonUp = smooth(-2, 10, malt) * mp.frac;
+      U.uShade.value = Math.max(0.62 * sunUp, 0.3 * moonUp * (1 - dayF));
+    }
     U.uLight.value = 0.6 + 0.5 * dayF + 0.08 * (useMoon ? mp.frac : 0);
     asciiU.uSkyTint.value.set(1, 1, 1).lerp(new T.Vector3(1.12, 0.95, 0.82), gold * 0.6).lerp(new T.Vector3(0.8, 0.9, 1.15), (1 - dayF) * 0.55);
     asciiU.uDeep.value.copy(vec3('#071820').lerp(vec3('#185160'), 0.15 + 0.85 * dayF));
@@ -2048,6 +2079,7 @@
     ctx.restore();
   }
   // fill is drawn in red; a soft blurred copy in green is the glow the screen shows on hover
+  let digitDrop = 0;
   function drawTimer(ctx, w, h, sx, label, big, icon) {
     ctx.clearRect(0, 0, w, h);
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
@@ -2058,13 +2090,13 @@
     };
     ctx.save(); ctx.translate(w / 2, 0); ctx.scale(sx, 1);
     if (/\d/.test(big)) {
-      const bigSize = h * 0.6;
+      const bigSize = h * 0.69;                                   // 15% bigger than v0.9
       ctx.font = `800 ${bigSize}px ${FONT_UI}`;
       const slot = bigSize * 0.62, colon = bigSize * 0.32;    // fixed-width slots: no jiggle
       const widths = big.split('').map((c) => (c === ':' ? colon : slot));
       let x = -widths.reduce((a, b) => a + b, 0) / 2;
       const xs = widths.map((wd) => { const c = x + wd / 2; x += wd; return c; });
-      ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], h * 0.6)));
+      ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], h * 0.6 + digitDrop)));
     } else {
       // a word in the digits' place (the name on the start screen): as big as fits the band
       let size = h * 0.74;
@@ -2109,6 +2141,7 @@
       // the digits: a band in the sky above the tank, sized to the grid (words go to real type when that option is on)
       const asType = state.wordsStyle !== 'dots';
       const tmp = document.createElement('canvas'); tmp.width = B.bandW; tmp.height = B.bandH;
+      digitDrop = Math.min(B.bandH * 0.09, 16 / grid.chCss);           // about 16px lower
       drawTimer(tmp.getContext('2d'), B.bandW, B.bandH, grid.ch / grid.cw, null, asType && !/\d/.test(s.big) ? '' : s.big, false);
       ctx.drawImage(tmp, B.bandX, B.bandTop);      // flipY on the texture means canvas top = screen top
       overlayTex.needsUpdate = true;
@@ -2342,7 +2375,7 @@
   $('resetTimer').onclick = timerReset;
   const wordStyles = ['dots', 'geist', 'doto'];
   seg('wordsSeg', ['dots', 'Geist Mono', 'Doto'], wordStyles.indexOf(state.wordsStyle), (i) => { state.wordsStyle = wordStyles[i]; save(); renderTimerText(true); });
-  $('baseAuto').onclick = () => { state.baseOverride = null; glowTarget = baseLit() ? 0.55 + 0.45 * (1 - skyInfo.dayF) : 0; save(); updateBaseLabel(); };
+  $('baseAuto').onclick = toggleBase;
   $('resetFish').onclick = () => { state.fish = []; state.pendingFish = 0; syncFish(); save(); };
   function exitGrowthPreview() { state.growthPreview = null; $('growthNow').classList.add('on'); }
   $('growth').oninput = (ev) => { state.growthPreview = +ev.target.value; $('growthNow').classList.remove('on'); updateDrawer(); };
@@ -2442,12 +2475,12 @@
   }
   let baseHover = false;
   function toggleBase() {
-    const on = !baseLit();
-    state.baseOverride = { on, night: skyInfo.night };
-    glowTarget = on ? 0.55 + 0.45 * (1 - skyInfo.dayF) : 0;
+    state.baseOn = !state.baseOn;
+    glowTarget = state.baseOn ? 0.55 + 0.45 * (1 - skyInfo.dayF) : 0;
     save(); updateBaseLabel();
-    $('live').textContent = on ? 'Base light on.' : 'Base light off.';
+    $('live').textContent = state.baseOn ? 'Base light on.' : 'Base light off.';
   }
+
   // drag sideways to turn the tank; let go and it glides, then settles on the nearest side
   const DEG_PER_PX = 0.42;
   let drag = null, suppressClick = false;
@@ -2620,7 +2653,7 @@
     staticNow() { return +U.uStatic.value.toFixed(2); },
     freezeStatic(v) { staticAnim = { phase: 'hold', t: 0, swap() {} }; U.uStatic.value = v; },
     baseBox() { let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (let k = 0; k < 24; k++) { const p = boundary((k / 24) * Math.PI * 2, 1.07).setY(-2.6).project(camera); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); } return { x0, x1, y0, tank: tankScreenBox().y0, rows: grid.rows * grid.chCss }; },
-    baseState() { return { lit: baseLit(), glow: +U.uGlow.value.toFixed(2), target: +glowTarget.toFixed(2), night: skyInfo.night, override: state.baseOverride }; },
+    baseState() { return { lit: baseLit(), glow: +U.uGlow.value.toFixed(2), target: +glowTarget.toFixed(2), night: skyInfo.night, on: state.baseOn }; },
     info() { return { fish: fishObjs.map((o) => [o.mode, +(o.mt || 0).toFixed(2), +o.p.x.toFixed(1), +o.p.y.toFixed(1), +o.p.z.toFixed(1), +o.mesh.scale.x.toFixed(2)]), pending: state.pendingFish, total: state.fish.length, found: found && found.type, anim: !!(found && found.anim), animT: found && found.anim ? +found.anim.t.toFixed(2) : -1, zoom: +state.zoom.toFixed(2), timer: state.timer.mode, splashes: splashes.length, sparkles: sparkles.length }; },
     fishRot(i) { const o = fishObjs[i]; if (!o) return null; const r = o.mesh.rotation; o.mesh.updateMatrixWorld(); const n = V(1, 0, 0).transformDirection(o.mesh.matrixWorld); return { r: [r.x, r.y, r.z, r.order].map((v) => (typeof v === 'number' ? +v.toFixed(2) : v)), nose: [n.x, n.y, n.z].map((v) => +v.toFixed(2)), prof: o.intro && +o.intro.profile.toFixed(2) }; },
     fishScreen(i) { const o = fishObjs[i]; return o ? toScreen(o.p) : null; },
