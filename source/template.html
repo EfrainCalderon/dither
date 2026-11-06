@@ -54,7 +54,7 @@
   body.idle .dock, body.idle .undo-wrap, body.idle .tune { visibility: hidden; pointer-events: none; }   /* they dither away first (in code) */
   .dithering { -webkit-mask-repeat: repeat; mask-repeat: repeat; }
 
-  /* ---------- bottom right: music volume, and "done with work" */
+  /* ---------- bottom right: music volume */
   .rdock { position: fixed; z-index: 4; right: calc(14px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px;
            height: calc(66px * var(--ui)); }      /* same height as the left dock, so both rows of buttons share a centerline */
   .dock { height: calc(66px * var(--ui)); }
@@ -62,8 +62,6 @@
   .vol { display: flex; align-items: center; gap: 2px; }
   .vol .icon-btn { --s: calc(30px * var(--ui)); width: calc(48px * var(--ui)); height: calc(48px * var(--ui)); }
   .vol input[type=range] { width: calc(92px * var(--ui)); accent-color: var(--ink); cursor: pointer; }
-  body.has-brain #doneBtn { display: none; }
-  .ghost.plain-done { padding: 0 calc(20px * var(--ui)); }
   body.swapping #rescapeBtn, body.swapping .undo { opacity: 0.45; pointer-events: none; transition: opacity 150ms; }
   @media (max-width: 640px) {     /* phones: volume stacks above info + new tank on the left, with a vertical slider */
     .vol { position: fixed; left: calc(14px + env(safe-area-inset-left)); bottom: calc(12px + 66px * var(--ui) + 8px + env(safe-area-inset-bottom));
@@ -71,6 +69,7 @@
     .vol .icon-btn { width: calc(66px * var(--ui)); }
     .vol input[type=range] { writing-mode: vertical-lr; direction: rtl; width: 26px; height: 104px; }
     .vol .tip { display: none; }
+    .timer-actions .ghost { min-height: 44px; }    /* a comfortable thumb target for reset / done */
   }
 
   /* ---------- ghost buttons: an outline, halftone words and icon */
@@ -89,6 +88,7 @@
   /* ---------- paused: reset, with a confirm step (stays up while paused; doesn't fade with the dock) */
   .timer-actions { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); }
   .timer-actions[hidden] { display: none; }
+  .timer-actions[data-kind=done] #resetBtn, .timer-actions:not([data-kind=done]) #doneBtn { display: none; }
   .timer-actions .ghost { padding: 0 calc(20px * var(--ui)); }
   .timer-actions .tip { bottom: auto; top: calc(100% - 4px); transform: translate(-50%, -6px); }
   .timer-actions .icon-btn:hover .tip, .timer-actions .icon-btn:focus-visible .tip { transform: translate(-50%, 0); }
@@ -187,13 +187,13 @@
 
 <div class="timer-actions" id="timerActions" hidden>
   <button class="ghost" id="resetBtn" aria-label="Reset the timer (undo available for a few seconds)"><span class="ht-text">reset timer</span></button>
+  <button class="ghost" id="doneBtn"><span class="ht-text">done for the day?</span></button>
 </div>
-<div class="rdock" role="toolbar" aria-label="Music and day">
+<div class="rdock" role="toolbar" aria-label="Music">
   <div class="vol">
     <button class="icon-btn" id="volBtn" aria-label="Mute music" aria-pressed="false"><span class="ht-halo"></span><span class="ht-icon" data-icon="vol"></span><span class="tip ht-text" aria-hidden="true">mute</span></button>
     <input type="range" id="volSlider" min="0" max="1" step="0.01" value="0.6" aria-label="Music volume">
   </div>
-  <button class="ghost plain-done" id="doneBtn"><span class="ht-text">done for the day?</span></button>
 </div>
 <div class="undo-wrap"><button class="ghost undo" id="undoPill" hidden><span class="ht-halo"></span><span class="ht-icon" data-icon="undo"></span><span class="ht-text">undo</span></button></div>
 

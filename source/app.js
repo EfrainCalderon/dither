@@ -2073,7 +2073,10 @@
   // paused: a trash icon under the timer. It dithers the timer away to the start screen; undo brings it back
   function updateTimerActions() {
     const box = document.getElementById('timerActions'); if (!box) return;
-    box.hidden = !(state.timer.mode.endsWith('-pause') || undoWhere === 'timer') || !!timerAnim;
+    // two jobs share this slot: "reset timer" while paused, and "done for the day?" once a rest runs out
+    const askDone = state.timer.mode === 'rest-done' && !state.brain && undoWhere !== 'timer';
+    box.dataset.kind = askDone ? 'done' : 'reset';
+    box.hidden = !(state.timer.mode.endsWith('-pause') || undoWhere === 'timer' || askDone) || !!timerAnim;
   }
   function placeTimerActions() {
     const box = document.getElementById('timerActions'); if (!box || box.hidden || !band) return;
@@ -2121,7 +2124,7 @@
     const tm = state.timer;
     if (tm.mode.endsWith('-run') && remaining() <= 0) {
       if (tm.mode === 'focus-run') { state.timer = { mode: 'focus-done', endsAt: 0, remaining: 0 }; completePom(true); }
-      else { state.timer = { mode: 'rest-done', endsAt: 0, remaining: 0 }; bell('rest-done'); $('live').textContent = 'Rest is over. Start focusing when you are ready.'; }
+      else { state.timer = { mode: 'rest-done', endsAt: 0, remaining: 0 }; bell('rest-done'); $('live').textContent = 'Rest is over. Start another focus, or call it a day.'; updateTimerActions(); placeTimerActions(); }
       save();
     }
     renderTimerText();
@@ -2137,7 +2140,7 @@
     const tm = state.timer, rem = remaining();
     if (tm.mode === 'idle') return { label: 'start focus', icon: true, big: 'Dither', dim: 1, title: true };
     if (tm.mode === 'focus-done') return { label: 'rest up', icon: true, big: '0:00', dim: 1, waiting: true };
-    if (tm.mode === 'rest-done') return { label: 'focus', icon: true, big: '0:00', dim: 1, waiting: true };
+    if (tm.mode === 'rest-done') return { label: 'start focus', icon: true, big: '0:00', dim: 1, waiting: true };
     const isRest = tm.mode.startsWith('rest');
     const paused = tm.mode.endsWith('-pause');
     return { label: paused ? 'paused' : isRest ? 'rest' : '', big: fmt(rem), dim: paused ? 0.6 : 1 };
@@ -2560,7 +2563,7 @@
     if (brain) return;
     hideUndo();
     if (state.timer.mode !== 'idle') withTimerDither(() => { timerReset(); });
-    makeBrain(true); state.brain = true; save(); syncBrainUI();
+    makeBrain(true); state.brain = true; save(); syncBrainUI(); updateTimerActions();
     $('live').textContent = 'Done with work. Enjoy the rest of your day.';
   }
 
