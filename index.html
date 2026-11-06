@@ -189,7 +189,7 @@
 
 <div class="timer-actions" id="timerActions" hidden>
   <button class="ghost" id="resetBtn" aria-label="Reset the timer (undo available for a few seconds)"><span class="ht-text">reset timer</span></button>
-  <button class="ghost" id="doneBtn"><span class="ht-text">done for the day?</span></button>
+  <button class="ghost" id="doneBtn"><span class="ht-text">call it a day</span></button>
 </div>
 <div class="rdock" role="toolbar" aria-label="Music">
   <div class="vol">
@@ -5992,9 +5992,17 @@ void main() {
     music.fresh[kind] = true;
     state.timer = { mode: `${kind}-run`, endsAt: Date.now() + mins * 60000, remaining: mins * 60 };
   }
+  // after "call it a day" the start screen is just the title, so you can wander the tank with no timer asking for anything.
+  // Clicking the title brings "start focus" back.
+  let dayPeek = false;
+  const dayOver = () => !!state.brain && !dayPeek;
   function timerPress() {
     audio();     // unlock sound on the first press
     const tm = state.timer;
+    if (tm.mode === 'idle' && dayOver()) {
+      if (!timerAnim) withTimerDither(() => { dayPeek = true; renderTimerText(true); announce(); });
+      return;
+    }
     if (tm.mode === 'idle' || tm.mode === 'rest-done') startPhase('focus');
     else if (tm.mode === 'focus-done') { startPhase('rest'); revealFish(); }
     else if (tm.mode.endsWith('-run')) { tm.remaining = remaining(); tm.mode = tm.mode.replace('-run', '-pause'); }
@@ -6005,8 +6013,8 @@ void main() {
   // paused: a trash icon under the timer. It dithers the timer away to the start screen; undo brings it back
   function updateTimerActions() {
     const box = document.getElementById('timerActions'); if (!box) return;
-    // two jobs share this slot: "reset timer" while paused, and "done for the day?" once a rest runs out
-    const askDone = state.timer.mode === 'rest-done' && !state.brain && undoWhere !== 'timer';
+    // two jobs share this slot: "reset timer" while paused, and "call it a day" once a focus session ends
+    const askDone = state.timer.mode === 'focus-done' && !state.brain && undoWhere !== 'timer';
     box.dataset.kind = askDone ? 'done' : 'reset';
     box.hidden = !(state.timer.mode.endsWith('-pause') || undoWhere === 'timer' || askDone) || !!timerAnim;
   }
@@ -6050,29 +6058,30 @@ void main() {
     // face the tank straight on for the rest
     if (fromTimer) { bell('focus-done'); }
     exitGrowthPreview(); save(); updateDrawer();
-    $('live').textContent = 'Focus session complete. Start your rest to meet a new fish.';
+    $('live').textContent = 'Focus session complete. Start your rest to meet a new fish, or call it a day.';
   }
   function tickTimer() {
     const tm = state.timer;
     if (tm.mode.endsWith('-run') && remaining() <= 0) {
-      if (tm.mode === 'focus-run') { state.timer = { mode: 'focus-done', endsAt: 0, remaining: 0 }; completePom(true); }
-      else { state.timer = { mode: 'rest-done', endsAt: 0, remaining: 0 }; bell('rest-done'); $('live').textContent = 'Rest is over. Start another focus, or call it a day.'; updateTimerActions(); placeTimerActions(); }
+      if (tm.mode === 'focus-run') { state.timer = { mode: 'focus-done', endsAt: 0, remaining: 0 }; completePom(true); updateTimerActions(); placeTimerActions(); }
+      else { state.timer = { mode: 'rest-done', endsAt: 0, remaining: 0 }; bell('rest-done'); $('live').textContent = 'Rest is over. Start focusing when you are ready.'; }
       save();
     }
     renderTimerText();
   }
   function announce() {
     const tm = state.timer, hit = $('timerHit');
-    const label = (tm.mode === 'idle' || tm.mode === 'rest-done') ? 'Start a 25 minute focus session' : tm.mode === 'focus-done' ? 'Rest up: start a 5 minute rest' : tm.mode.endsWith('-run') ? `Pause timer, ${fmt(remaining())} left` : `Resume timer, ${fmt(remaining())} left`;
+    const label = (tm.mode === 'idle' && dayOver()) ? 'Dither. Show the start focus button' : (tm.mode === 'idle' || tm.mode === 'rest-done') ? 'Start a 25 minute focus session' : tm.mode === 'focus-done' ? 'Rest up: start a 5 minute rest' : tm.mode.endsWith('-run') ? `Pause timer, ${fmt(remaining())} left` : `Resume timer, ${fmt(remaining())} left`;
     hit.setAttribute('aria-label', label);
   }
   // draw the timer text: label (small) + big digits or "focus"
   let lastTimerText = '';
   function timerStrings() {
     const tm = state.timer, rem = remaining();
+    if (tm.mode === 'idle' && dayOver()) return { label: '', big: 'Dither', dim: 1, title: true };
     if (tm.mode === 'idle') return { label: 'start focus', icon: true, big: 'Dither', dim: 1, title: true };
     if (tm.mode === 'focus-done') return { label: 'rest up', icon: true, big: '0:00', dim: 1, waiting: true };
-    if (tm.mode === 'rest-done') return { label: 'start focus', icon: true, big: '0:00', dim: 1, waiting: true };
+    if (tm.mode === 'rest-done') return { label: 'focus', icon: true, big: '0:00', dim: 1, waiting: true };
     const isRest = tm.mode.startsWith('rest');
     const paused = tm.mode.endsWith('-pause');
     return { label: paused ? 'paused' : isRest ? 'rest' : '', big: fmt(rem), dim: paused ? 0.6 : 1 };
@@ -6495,8 +6504,9 @@ void main() {
     if (brain) return;
     hideUndo();
     if (state.timer.mode !== 'idle') withTimerDither(() => { timerReset(); });
-    makeBrain(true); state.brain = true; save(); syncBrainUI(); updateTimerActions();
-    $('live').textContent = 'Done with work. Enjoy the rest of your day.';
+    dayPeek = false;
+    makeBrain(true); state.brain = true; save(); syncBrainUI(); updateTimerActions(); renderTimerText(true); announce();
+    $('live').textContent = 'Called it a day. Enjoy the rest of it.';
   }
 
   // ================================================================ music: lofi under focus and rest
