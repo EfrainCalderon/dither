@@ -112,7 +112,7 @@
 
   /* ---------- undo: centered, level with the dock; fades away in 4 seconds */
   .undo-wrap { display: none; }      /* the undo button lives next to whatever it undoes */
-  .undo[hidden], #tankViewBtn[hidden] { display: none; }
+  .undo[hidden] { display: none; }
   .undo { transition: opacity 280ms ease; }
   .undo.leaving { opacity: 0; }
 
@@ -205,7 +205,6 @@
 <div class="dock" role="toolbar" aria-label="Tank">
   <button class="icon-btn" id="aboutBtn" aria-label="About" aria-haspopup="dialog"><span class="ht-halo"></span><span class="ht-icon" data-icon="info"></span><span class="tip ht-text" aria-hidden="true">about</span></button>
   <button class="ghost" id="rescapeBtn"><span class="ht-halo"></span><span class="ht-icon" data-icon="refresh"></span><span class="ht-text">new tank</span></button>
-  <button class="ghost" id="tankViewBtn" hidden><span class="ht-halo"></span><span class="ht-icon" data-icon="back"></span><span class="ht-text">whole tank</span></button>
 </div>
 
 <div class="timer-actions" id="timerActions" hidden>

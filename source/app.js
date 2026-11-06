@@ -1,5 +1,5 @@
 /*
-  Dither 1.3
+  Dither 1.3.1
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -3488,7 +3488,6 @@
   }
 
   $('rescapeBtn').onclick = rescape;
-  $('tankViewBtn').onclick = () => endFollow(false);
   $('tune').onclick = () => { const on = !$('drawer').classList.contains('on'); $('drawer').classList.toggle('on', on); $('tune').setAttribute('aria-expanded', on); $('tune').classList.toggle('on', on); };
   $('timerHit').onclick = timerPress;
   let hovering = false;
@@ -3679,22 +3678,14 @@
     if (!follow) follow = { back: state.zoomTarget };       // where to go back to afterwards
     follow.o = o; follow.cine = !!cine; follow.swimAt = 0;
     state.zoomTarget = zoomMin(); zoomRate = cine ? 1.4 : 2.2;
-    syncFollowUI();
   }
   function endFollow(slow) {
     if (!follow) return;
     state.zoomTarget = clamp(follow.back, zoomMin(), 1.3);
     zoomRate = slow ? 0.55 : 2.2; homeRate = slow ? 0.035 : 0.15;
-    follow = null; syncFollowUI();
+    follow = null;
   }
-  // "whole tank" in the dock while the camera follows a fish
-  function syncFollowUI() {
-    const b = document.getElementById('tankViewBtn'); if (!b) return;
-    const want = !!follow;
-    if (want === !b.hidden) return;
-    if (want) { b.hidden = false; if (!document.body.classList.contains('idle')) ditherEl(b, true, 220); }
-    else ditherEl(b, false, 220, () => { if (!follow) { b.hidden = true; setMask(b, null); } });
-  }
+
   const touchPts = new Map(); let pinch = null;
   const spread = () => { const [a, b] = [...touchPts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
   canvas.addEventListener('pointerdown', (ev) => {
