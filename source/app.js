@@ -1,5 +1,5 @@
 /*
-  Dither — prototype 0.19
+  Dither 1.0
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one goldfish or koi (they reset at midnight)
@@ -166,6 +166,7 @@
   };
   let saveTimer = 0;
   function save() {
+    setEndAlarm();          // every timer change is saved, so this keeps the end-of-session alarm in step
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
@@ -2078,7 +2079,7 @@
     save(); renderTimerText(true); announce(); primeMusic();
   }
   function timerReset() { state.timer = { mode: 'idle', endsAt: 0, remaining: FOCUS_MIN * 60 }; while (state.pendingFish > 0) revealFish(); save(); renderTimerText(true); announce(); }
-  // paused: a trash icon under the timer. It dithers the timer away to the start screen; undo brings it back
+  // paused: a "reset timer" button under the timer. It dithers the timer away to the start screen; undo brings it back
   function updateTimerActions() {
     const box = document.getElementById('timerActions'); if (!box) return;
     // two jobs share this slot: "reset timer" while paused, and "call it a day" once a focus session ends
@@ -2095,7 +2096,12 @@
   function resetTimerUndoable() {
     if (!state.timer.mode.endsWith('-pause') || timerAnim) return;
     const prev = JSON.parse(JSON.stringify(state.timer));
-    withTimerDither(() => { timerReset(); }, () => showUndo(() => withTimerDither(() => { state.timer = prev; save(); renderTimerText(true); announce(); }), 'timer'));
+    const restore = () => {
+      // resetting folded the focus turns into the tank's resting angle; take them back out so undo doesn't spin it around
+      if (prev.mode === 'focus-pause') { const p = clamp(1 - prev.remaining / (FOCUS_MIN * 60), 0, 1); state.view -= p * TURNS * 360; state.lastProgress = p; }
+      state.timer = prev; save(); renderTimerText(true); announce();
+    };
+    withTimerDither(() => { timerReset(); }, () => showUndo(() => withTimerDither(restore), 'timer'));
     $('live').textContent = 'Timer cleared. Undo is available for a few seconds.';
   }
   // the timer's own dither: the digits dissolve, the swap happens, the new words fill back in
@@ -2137,6 +2143,22 @@
     }
     renderTimerText();
   }
+  // The timer keeps its own clock. Browsers pause drawing in a background tab (good: no wasted work), but the bell,
+  // the title and the music fade must still happen on time. A once-a-second beat covers that, and a one-off alarm set
+  // for the exact end of each session catches it even when the browser slows the beat down for a quiet tab.
+  var lastBeat = performance.now(), endAlarm = 0;     // var: save() can run before this line does
+  function heartbeat() {
+    const now = performance.now(), dt = Math.min(2, (now - lastBeat) / 1000); lastBeat = now;
+    tickTimer();
+    if (document.hidden) musicTick(dt);       // when the tab is visible, the render loop does this every frame
+  }
+  function setEndAlarm() {
+    clearTimeout(endAlarm);
+    const tm = state.timer;
+    if (tm.mode.endsWith('-run')) endAlarm = setTimeout(heartbeat, Math.max(0, tm.endsAt - Date.now()) + 50);
+  }
+  setInterval(heartbeat, 1000);
+  document.addEventListener('visibilitychange', heartbeat);
   function announce() {
     const tm = state.timer, hit = $('timerHit');
     const label = (tm.mode === 'idle' && dayOver()) ? 'Dither. Show the start focus button' : (tm.mode === 'idle' || tm.mode === 'rest-done') ? 'Start a 25 minute focus session' : tm.mode === 'focus-done' ? 'Rest up: start a 5 minute rest' : tm.mode.endsWith('-run') ? `Pause timer, ${fmt(remaining())} left` : `Resume timer, ${fmt(remaining())} left`;
@@ -2565,7 +2587,8 @@
     b.mesh.position.copy(b.pos); b.mesh.rotation.set(b.rot.x + rockX, b.rot.y, b.rot.z + rockZ);
     b.mesh.scale.set(BRAIN_SCALE * sx, BRAIN_SCALE * sy, BRAIN_SCALE * sx);
   }
-  function brainLeave() { if (brain && brain.phase !== 'leaving') { brain.phase = 'leaving'; brain.leave = 0; } }
+  // forget the brain right away (not when the animation ends), so a reload or a background tab can't bring it back
+  function brainLeave() { if (brain && brain.phase !== 'leaving') { brain.phase = 'leaving'; brain.leave = 0; } if (state.brain) { state.brain = false; save(); } }
   function pokeBrain() { if (!brain || brain.phase !== 'float') return; brain.vel.y -= 9; addRipple(brain.pos.x, brain.pos.z, 1.6, U.uTime.value); splash(brain.pos.x, U.uWater.value, brain.pos.z, 60, 1.6); }
   function syncBrainUI() { document.body.classList.toggle('has-brain', !!state.brain); }
   function doneWithWork() {
@@ -2612,7 +2635,8 @@
   function stopSource(k) {
     const ctx = audio(), B = music.buf[k], src = music.src[k]; if (!src) return;
     if (ctx && B) music.offset[k] = (ctx.currentTime - music.t0[k]) % (B.end - B.start);
-    try { src.stop(); } catch (e) { /* already stopped */ }
+    // in a background tab the last step of the fade is still gliding down, so let it finish before stopping
+    try { src.stop(ctx && document.hidden ? ctx.currentTime + 1 : 0); } catch (e) { /* already stopped */ }
     music.src[k] = null;
   }
   function musicEl(k) { if (!music.el[k]) { const a = new Audio(TRACKS[k]); a.loop = true; a.preload = 'auto'; music.el[k] = a; } return music.el[k]; }
@@ -2623,7 +2647,11 @@
     if (el.paused) el.play().then(() => { music.wantGesture = false; }).catch(() => { music.wantGesture = true; });
   }
   function pauseMusic(k) { music.playing[k] = false; if (useGraph) stopSource(k); else if (music.el[k] && !music.el[k].paused) music.el[k].pause(); }
-  function setLevel(k, v) { if (useGraph) { if (music.gain[k]) music.gain[k].gain.value = v; } else if (music.el[k]) music.el[k].volume = clamp(v, 0, 1); }
+  // the audio engine glides to each new level itself, so the fade stays smooth even when a background tab only ticks once a second
+  function setLevel(k, v, glide) {
+    if (useGraph) { const g = music.gain[k]; if (g) g.gain.setTargetAtTime(v, g.context.currentTime, glide); }
+    else if (music.el[k]) music.el[k].volume = clamp(v, 0, 1);
+  }
   function primeMusic() {                    // called inside a click, so browsers allow the sound to start
     audio();
     const m = state.timer.mode, k = m === 'focus-run' ? 'focus' : m === 'rest-run' ? 'rest' : null;
@@ -2640,7 +2668,7 @@
       }
       if (target > 0.001 && !music.playing[kk] && !music.wantGesture) playMusic(kk);
       music.level[kk] += (target - music.level[kk]) * (1 - Math.exp(-dt * (target > music.level[kk] ? 10 : 6)));
-      setLevel(kk, Math.pow(music.level[kk], 1.6));                         // curved so the slider feels even
+      setLevel(kk, Math.pow(music.level[kk], 1.6), Math.max(0.03, dt * 0.25));   // curved so the slider feels even
       if (target === 0 && music.level[kk] < 0.004 && music.playing[kk]) { pauseMusic(kk); music.level[kk] = 0; }
       if (target > 0 && music.fresh[kk] && music.level[kk] > target * 0.95) music.fresh[kk] = false;
     }
