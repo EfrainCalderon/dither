@@ -78,8 +78,8 @@
     .vol .icon-btn { width: 48px; height: 48px; }
   }
   /* while a focus session runs, everything but the timer steps back after a few still seconds (body.quiet, set in code) */
-  :is(.dock, .rdock, .scrim, .mode-tabs, .cycle, .timer-actions) { transition: opacity 600ms ease; }
-  body.quiet :is(.dock, .rdock, .scrim, .mode-tabs, .cycle, .timer-actions) { opacity: 0.28; }
+  :is(.dock, .rdock, .scrim, .mode-tabs, .timer-actions) { transition: opacity 600ms ease; }
+  body.quiet :is(.dock, .rdock, .scrim, .mode-tabs, .timer-actions) { opacity: 0.28; }
 
   /* ---------- touch screens: every control gets at least a 44pt target (Apple's minimum), without changing how it looks.
      An invisible layer extends each small button or link to 44px each way. */
@@ -89,9 +89,16 @@
     .credits a { padding: 6px 2px 23px; margin: 0 -2px; }      /* reach down into the card's empty bottom edge, not up into the coffee button */
   }
 
-  /* ---------- pill buttons: solid fill, solid words and icon. The fill flips dark/light with the sky behind it (solidButton in code). */
+  /* ---------- 8-bit corners: buttons and tabs are boxes with a two-step pixel staircase at each corner (--p is one step) */
+  :is(.ghost, .mode-tabs button, .coffee, .coffee .cup) { --p: 4px; border-radius: 0;
+    clip-path: polygon(0 calc(var(--p) * 2), var(--p) calc(var(--p) * 2), var(--p) var(--p), calc(var(--p) * 2) var(--p), calc(var(--p) * 2) 0,
+      calc(100% - var(--p) * 2) 0, calc(100% - var(--p) * 2) var(--p), calc(100% - var(--p)) var(--p), calc(100% - var(--p)) calc(var(--p) * 2), 100% calc(var(--p) * 2),
+      100% calc(100% - var(--p) * 2), calc(100% - var(--p)) calc(100% - var(--p) * 2), calc(100% - var(--p)) calc(100% - var(--p)), calc(100% - var(--p) * 2) calc(100% - var(--p)), calc(100% - var(--p) * 2) 100%,
+      calc(var(--p) * 2) 100%, calc(var(--p) * 2) calc(100% - var(--p)), var(--p) calc(100% - var(--p)), var(--p) calc(100% - var(--p) * 2), 0 calc(100% - var(--p) * 2)); }
+  .coffee .cup { --p: 7px; }
+  /* ---------- buttons: solid fill, solid words and icon. The fill flips dark/light with the sky behind it (solidButton in code). */
   .ghost { --bg: var(--btn-bg); --fg: var(--btn-ink); --ink: var(--fg);
-           position: relative; display: inline-flex; align-items: center; gap: calc(9px * var(--ui)); height: max(40px, calc(44px * var(--ui))); padding: 0 calc(20px * var(--ui)) 0 calc(15px * var(--ui)); border-radius: 999px;
+           position: relative; display: inline-flex; align-items: center; gap: calc(9px * var(--ui)); height: max(40px, calc(44px * var(--ui))); padding: 0 calc(20px * var(--ui)) 0 calc(15px * var(--ui));
            border: 0; background: var(--bg); color: var(--fg); transition: background-color 200ms ease, transform 200ms ease; }
   .timer-actions .ghost { --bg: var(--abtn-bg); --fg: var(--abtn-ink); }
   .ghost:hover, .ghost:focus-visible { background: color-mix(in srgb, var(--bg) 84%, var(--fg)); }
@@ -100,35 +107,26 @@
   .ghost .ht-halo { display: none; }
   .ghost:active { transform: scale(0.97); }
   .ghost[hidden], .icon-btn[hidden] { display: none; }
-  .ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 70%, transparent); }
+  .ghost:focus-visible { outline: none; box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--glow) 70%, transparent); }
   .ghost .ht-icon { --s: calc(24px * var(--ui)); }
   .ghost .ht-halo { --s: calc(24px * var(--ui)); left: calc(27px * var(--ui)); }
   .ghost:hover .ht-halo, .ghost:focus-visible .ht-halo { opacity: 1; }
   .ghost:hover .ht-icon { transform: rotate(-8deg) scale(1.06); }
   .ghost .ht-text { font-size: max(var(--t-sm), calc(var(--t-md) * var(--ui))); line-height: 1; }
 
-  /* ---------- the timer's controls. Above the digits: the session tabs and the round's four squares.
-     Below: Start (the main action, solid and larger) or Pause (quieter), with skip as a bare icon beside it. */
+  /* ---------- the timer's controls. Above the digits: the session tabs, plain words with the current one on a soft
+     pill. The three are the same width, so the middle one sits right over the middle of the digits.
+     Below: Start (the main action, solid and larger) or Pause (quieter), with skip as a bare icon beside it while a session runs. */
   .mode-tabs { position: fixed; z-index: 4; left: 50%; top: calc(12px + env(safe-area-inset-top)); transform: translateX(-50%);
-               display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--abtn-tone); }
-  .mode-tabs[hidden], .cycle[hidden], .pause-mark[hidden] { display: none; }
-  .mode-tabs button { position: relative; height: 32px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--abtn-bg);
-                      font-size: max(var(--t-sm), calc(var(--t-sm) * var(--ui))); line-height: 1; white-space: nowrap; transition: background-color 200ms ease, color 200ms ease, box-shadow 150ms ease; }
-  .mode-tabs button[aria-pressed=true] { background: var(--abtn-bg); color: var(--abtn-ink); }
-  .mode-tabs button:not([aria-pressed=true]):hover { background: color-mix(in srgb, var(--abtn-tone) 88%, var(--abtn-bg)); }
-  .mode-tabs button.armed { box-shadow: inset 0 0 0 2px var(--abtn-bg); }
-  .mode-tabs button:focus-visible, .skip:focus-visible { outline: 2px solid var(--abtn-bg); outline-offset: 2px; }
-  .cycle { position: fixed; z-index: 4; left: 50%; top: calc(12px + 40px + 10px + env(safe-area-inset-top)); transform: translateX(-50%); display: flex; gap: 6px; }
-  .cycle span { width: 8px; height: 8px; border-radius: 2px; border: 1.5px solid var(--abtn-bg); box-shadow: 0 0 0 1px color-mix(in srgb, var(--abtn-ink) 35%, transparent); transition: background-color 300ms ease; }
-  .cycle span.on { background: var(--abtn-bg); }
-  /* "Tap again": shown under a tab or skip when that tap would throw away time already on the clock */
-  .hint { position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); z-index: 5; white-space: nowrap; padding: 6px 10px; border-radius: 8px;
-          background: var(--abtn-bg); color: var(--abtn-ink); font-size: var(--t-sm); line-height: 1; opacity: 0; pointer-events: none; transition: opacity 150ms ease; }
-  .mode-tabs.armed > .hint, .skip.armed .hint { opacity: 1; }
-  /* paused: a pause mark over the middle of the digits */
-  .pause-mark { --d: 56px; position: fixed; z-index: 2; width: var(--d); height: var(--d); transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
-                background: var(--abtn-bg); display: flex; align-items: center; justify-content: center; gap: calc(var(--d) * 0.13); }
-  .pause-mark i { width: calc(var(--d) * 0.14); height: calc(var(--d) * 0.42); border-radius: 2px; background: var(--abtn-ink); }
+               width: max-content; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
+  .mode-tabs[hidden] { display: none; }
+  .mode-tabs button { position: relative; height: 40px; padding: 0 16px; border: 0; background: transparent; color: var(--abtn-bg);
+                      text-shadow: 0 0 1px var(--abtn-ink), 0 0 2px var(--abtn-ink), 0 0 4px color-mix(in srgb, var(--abtn-ink) 60%, transparent);
+                      font-size: max(var(--t-sm), calc(var(--t-sm) * var(--ui))); line-height: 1; white-space: nowrap; transition: background-color 200ms ease; }
+  .mode-tabs button[aria-pressed=true] { background: var(--abtn-tone); text-shadow: none; }
+  .mode-tabs button:not([aria-pressed=true]):hover { background: color-mix(in srgb, var(--abtn-tone) 45%, transparent); }
+  .mode-tabs button:focus-visible { outline: 2px solid var(--abtn-bg); outline-offset: -4px; }
+  .skip:focus-visible { outline: 2px solid var(--abtn-bg); outline-offset: 2px; }
   .timer-actions { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 12px; }
   .timer-actions[hidden] { display: none; }
   .ta-row { position: relative; display: flex; }
@@ -153,7 +151,7 @@
   .about.on { visibility: visible; pointer-events: auto; }
   /* the card is see-through glass, so the controls step back while it's open instead of showing through it */
   .tune { transition: opacity 220ms ease; }
-  body.about-open :is(.dock, .rdock, .timer-actions, .tune, .mode-tabs, .cycle, .pause-mark) { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms ease, visibility 0s 220ms; }
+  body.about-open :is(.dock, .rdock, .timer-actions, .tune, .mode-tabs) { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms ease, visibility 0s 220ms; }
   .glass { --ink: var(--card-ink, #143650); --line: color-mix(in srgb, var(--ink) 30%, transparent);
            position: relative; width: min(500px, calc(100vw - 32px)); padding: 46px 40px 38px; border-radius: 34px; display: grid; gap: 18px; justify-items: center; text-align: center;
            background: color-mix(in srgb, var(--card-bg, #8fbde6) 80%, transparent); transition: background-color 3s ease; }
@@ -166,13 +164,13 @@
   .title a::after { content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 2px; border-radius: 1px; background: var(--ink); opacity: 0.85; transition: opacity 200ms, transform 200ms; }
   .title a:hover::after { opacity: 1; transform: scaleY(1.5); }
   /* "Buy me a coffee": the words, then a round cup button (it opens Buy Me a Coffee's own panel; see loadCoffee in code) */
-  .coffee { --bg: var(--cbtn-bg); --fg: var(--cbtn-ink); position: relative; display: inline-flex; align-items: center; gap: 14px; padding: 4px 4px 4px 18px; border-radius: 999px;
+  .coffee { --bg: var(--cbtn-bg); --fg: var(--cbtn-ink); position: relative; display: inline-flex; align-items: center; gap: 14px; padding: 4px 4px 4px 18px;
             text-decoration: none; font-size: var(--t-lg); line-height: 1; transition: background-color 220ms ease; }
-  .coffee .cup { width: 52px; height: 52px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; transition: transform 220ms ease; }
+  .coffee .cup { width: 52px; height: 52px; background: var(--bg); display: grid; place-items: center; transition: transform 220ms ease; }
   .coffee .ht-icon { --s: 30px; }
   .coffee:hover, .coffee:focus-visible { background: color-mix(in srgb, var(--ink) 9%, transparent); }
   .coffee:hover .cup, .coffee:focus-visible .cup { transform: scale(1.06); }
-  .coffee:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .coffee:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
   .coffee:hover .ht-icon, .coffee:focus-visible .ht-icon { animation: steam 900ms ease-in-out infinite alternate; }
   @keyframes steam { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-2px) rotate(4deg); } }
   .credits { margin: 4px 0 0; font-size: var(--t-sm); line-height: 1.3; font-weight: 400; color: var(--ink); opacity: 0.85; }
@@ -245,15 +243,12 @@
   <button data-kind="focus" aria-pressed="true">Focus</button>
   <button data-kind="short" aria-pressed="false">Short rest</button>
   <button data-kind="long" aria-pressed="false">Long rest</button>
-  <span class="hint" aria-hidden="true">Tap again to switch</span>
 </div>
-<div class="cycle" id="cycleDots" role="img" aria-label="0 of 4 focus sessions done this round" hidden><span></span><span></span><span></span><span></span></div>
-<div class="pause-mark" id="pauseMark" aria-hidden="true" hidden><i></i><i></i></div>
 <div class="timer-actions" id="timerActions" hidden>
   <div class="ta-row">
     <button class="ghost primary" id="startBtn"><span class="ht-icon" data-icon="play"></span><span class="ht-text">Start</span></button>
     <button class="ghost tonal" id="pauseBtn" hidden><span class="ht-text">Pause</span></button>
-    <button class="skip" id="skipBtn" aria-label="Skip to the next session" hidden><span class="ht-icon" data-icon="skip"></span><span class="hint" aria-hidden="true">Tap again to skip</span></button>
+    <button class="skip" id="skipBtn" aria-label="Skip to the next session" hidden><span class="ht-icon" data-icon="skip"></span></button>
   </div>
 </div>
 <div class="rdock" role="toolbar" aria-label="Music">

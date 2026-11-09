@@ -1,5 +1,5 @@
 /*
-  Dither 1.4
+  Dither 1.5
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -197,7 +197,7 @@
     fishDay: today(),
     timer: normTimer(saved.timer),
     cycle: saved.fishDay === today() ? Math.min(ROUND, saved.cycle || 0) : 0,     // focus sessions finished this round (resets at midnight)
-    view: 0, az: 0, spin: 0, lastProgress: null, zoom: 1, zoomTarget: 1, driftPhase: 0, driftAmp: 30,
+    view: 0, az: 0, spin: 0, lastProgress: null, panY: 0, zoom: 1, zoomTarget: 1, driftPhase: 0, driftAmp: 30,
     growthPreview: null, skyPreview: null,
   };
   let saveTimer = 0;
@@ -693,8 +693,9 @@
         }
         vec4 o = texelFetch(uOverlay, ivec2(cell), 0);
         float fill = o.r * o.a, glow = o.g * o.a;
-        if (fill > 0.35 && !(uOverlayDim < 0.99 && bayer4(cell) > 0.6) && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
-          float r = rMax * (0.55 + 0.45 * fill) * (1.05 + 0.1 * uOverlayGlow);
+        bool faded = o.b * o.a > 0.5;      // blue marks ink drawn faded (the digits behind the pause mark): half the dots, smaller
+        if (fill > 0.35 && !(faded && bayer4(cell) > 0.5) && !(uOverlayDim < 0.99 && bayer4(cell) > 0.6) && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
+          float r = rMax * (0.55 + 0.45 * fill) * (1.05 + 0.1 * uOverlayGlow) * (faded ? 0.8 : 1.0);
           float m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
           gl_FragColor = vec4(mix(bg, uOverlayCol, m), 1.0); return;
         }
@@ -929,8 +930,8 @@
     {
       const aspectV = (cols * cwDev) / (rows * chDev);
       const bandW = Math.round(cols * (aspectV < 0.8 ? 0.92 : aspectV < 1.25 ? 0.72 : 0.5));     // phones get most of the width
-      // sizes in cells. The digits sit under the session tabs and round squares (set in CSS: tabs 12px from the top,
-      // 40px tall, squares 10px under them), with 16px of sky between those and the digits, and 16px down to "Start".
+      // sizes in cells. The digits sit under the session tabs (set in CSS: 12px from the top, 40px tall), with a
+      // little sky between them and the digits, and 16px down to "Start".
       const pxc = chDev / dpr, GAP = 24 / pxc, sxr = chDev / cwDev;
       const capR = digitCapRatio();                                                 // how tall the typeface's digits are, per unit of size
       const digit = Math.min(rows * 0.145, (bandW / sxr) * 0.94 / 2.8);          // "25:00" fits the band
@@ -938,7 +939,7 @@
       const digitBase = 0.6 + capR * digit, labBase = digitBase + GAP + 0.73 * lab;
       const oyCss = (H - rows * chDev / dpr) / 2, tabsEl = document.getElementById('modeTabs');
       const tabsTop = (tabsEl && parseFloat(getComputedStyle(tabsEl).top)) || 12;
-      const digitTopPx = tabsTop + 40 + 10 + 8 + 22;
+      const digitTopPx = tabsTop + 40 + 22;
       const bandTop = Math.max(1, Math.round((digitTopPx - oyCss) / pxc - 0.6));
       const bandH = Math.min(rows - 2, Math.ceil(digitBase + 1.2)), bandX = Math.round((cols - bandW) / 2);
       const lTop = bandTop + Math.max(0, Math.floor(labBase - lab * 1.05)), lH = Math.min(rows - lTop, Math.ceil(lab * 1.45) + 2);
@@ -3098,12 +3099,9 @@
     if (state.pendingFish > 0) revealFish(kind !== 'focus');
     if (state.pendingItem > 0) revealItem(kind !== 'focus');
   }
-  // a session with time already on it: switching or skipping would throw that away
-  const hasProgress = () => { const tm = state.timer; return tm.mode === 'run' || (tm.mode === 'pause' && tm.remaining < fullLen(tm.kind) - 1); };
   function timerPress() {
     audio();     // unlock sound on the first press
     const tm = state.timer;
-    setArmed(null);
     if (tm.mode === 'idle') startSession('focus');
     else if (tm.mode === 'ready') startSession(tm.kind);
     else if (tm.mode === 'run') { tm.remaining = remaining(); tm.mode = 'pause'; }
@@ -3111,41 +3109,25 @@
     save(); renderTimerText(true); announce(); primeMusic(); wake();
   }
   function timerReset() { state.timer = { mode: 'idle', kind: 'focus', endsAt: 0, remaining: fullLen('focus') }; while (state.pendingFish > 0) revealFish(); while (state.pendingItem > 0) revealItem(false); save(); renderTimerText(true); announce(); }
-  // A tap that would throw away time already on the clock (a tab, or skip) waits for a second tap within 3 s.
-  // No dialog: the control itself says "Tap again".
-  let armed = null, armTimer = 0;
-  function setArmed(key) {
-    armed = key; clearTimeout(armTimer);
-    if (key) armTimer = setTimeout(() => setArmed(null), 3000);
-    const tabs = document.getElementById('modeTabs'), skip = document.getElementById('skipBtn');
-    if (!tabs) return;
-    tabs.classList.toggle('armed', !!key && key.startsWith('tab-'));
-    tabs.querySelectorAll('button[data-kind]').forEach((b) => b.classList.toggle('armed', key === `tab-${b.dataset.kind}`));
-    skip.classList.toggle('armed', key === 'skip');
-  }
   // the tabs: any of them sets that session up fresh, ready to start
   function chooseKind(kind) {
     if (timerAnim || !LEN_MIN[kind]) return;
     const tm = state.timer;
     if (tm.mode === 'ready' && tm.kind === kind) return;              // already set up
-    if (hasProgress() && armed !== `tab-${kind}`) { setArmed(`tab-${kind}`); return; }
-    setArmed(null);
     withTimerDither(() => { readyFor(kind); save(); renderTimerText(true); announce(); });
     $('live').textContent = `${KIND_NAME[kind]}, ${LEN_MIN[kind]} minutes. Ready to start.`;
   }
   // skip: set up the next session in the round. A skipped focus doesn't count toward the round (or earn a koi).
   function skipSession() {
     if (timerAnim || state.timer.mode === 'idle') return;
-    if (hasProgress() && armed !== 'skip') { setArmed('skip'); return; }
-    setArmed(null);
     const k = state.timer.kind;
     if (k === 'long') state.cycle = 0;                  // the long rest closes the round, taken or not
     const next = nextKind(k);
     withTimerDither(() => { readyFor(next); save(); renderTimerText(true); announce(); });
     $('live').textContent = `Skipped. ${KIND_NAME[next]} is next.`;
   }
-  // the controls around the timer: session tabs and round squares above the digits; start / pause, skip and
-  // "call it a day" below; a pause mark over the digits while paused
+  // the controls around the timer: session tabs above the digits; start / pause below, with skip beside it while
+  // a session runs. Paused, a pause mark is drawn into the digits themselves (drawTimer)
   function setShown(el, on) {
     if (!el || el._shown === on) return;
     el._shown = on;
@@ -3156,28 +3138,18 @@
     const tabs = document.getElementById('modeTabs'); if (!tabs) return;
     const tm = state.timer, title = tm.mode === 'idle';
     setShown(tabs, !title);
-    setShown($('cycleDots'), !title);
     setShown($('timerActions'), true);
     $('startBtn').hidden = tm.mode === 'run';
     $('pauseBtn').hidden = tm.mode !== 'run';
-    $('skipBtn').hidden = title;
-    setShown($('pauseMark'), tm.mode === 'pause');
+    $('skipBtn').hidden = tm.mode !== 'run';
     tabs.querySelectorAll('button[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(!title && b.dataset.kind === tm.kind)));
-    const done = Math.min(ROUND, state.cycle);
-    $('cycleDots').querySelectorAll('span').forEach((d, i) => d.classList.toggle('on', i < done));
-    $('cycleDots').setAttribute('aria-label', `${done} of ${ROUND} focus sessions done this round`);
     $('skipBtn').setAttribute('aria-label', `Skip to ${KIND_NAME[nextKind(tm.kind)].toLowerCase()}`);
   }
   function placeTimerActions() {
     if (!band) return;
-    const box = $('timerActions'), oy = (window.innerHeight - grid.rows * grid.chCss) / 2, ox = (window.innerWidth - grid.cols * grid.cwCss) / 2;
+    const box = $('timerActions'), oy = (window.innerHeight - grid.rows * grid.chCss) / 2;
     const top = Math.round(oy + (band.bandTop + band.actTop) * grid.chCss);
     if (top !== box._top) { box._top = top; box.style.top = `${top}px`; }
-    // the pause mark sits on the middle of the digits, a little smaller than they are tall
-    const h = band.capR * (drawnDigit || band.digit) * grid.chCss, pm = $('pauseMark');
-    pm.style.setProperty('--d', `${Math.round(h * 0.78)}px`);
-    pm.style.left = `${Math.round(ox + (band.bandX + band.bandW / 2) * grid.cwCss)}px`;
-    pm.style.top = `${Math.round(oy + (band.bandTop + band.digitBase) * grid.chCss - h / 2)}px`;
   }
   // the timer's own dither: the digits dissolve, the swap happens, the new words fill back in
   let timerAnim = null;
@@ -3218,7 +3190,7 @@
       if (k === 'focus') { state.cycle = Math.min(ROUND, state.cycle + 1); completePom(true, state.cycle >= ROUND ? 'item' : 'koi'); }
       else { if (k === 'long') state.cycle = 0; bell('rest-done'); }
       const next = nextKind(k);
-      readyFor(next, tm.endsAt); setArmed(null);
+      readyFor(next, tm.endsAt);
       $('live').textContent = k === 'focus' ? `Focus session done. ${KIND_NAME[next]} is ready when you are, or call it a day.` : `${KIND_NAME[k]} is over. Focus is ready when you are.`;
       save(); writeSave(); renderTimerText(true); announce(); wake();
     }
@@ -3296,10 +3268,10 @@
   function drawTimer(ctx, w, h, sx, label, big, icon) {
     ctx.clearRect(0, 0, w, h);
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    const ink = (fn) => {
+    const ink = (fn, faded) => {
       ctx.save(); ctx.shadowColor = '#00ff00'; ctx.shadowBlur = Math.max(2, h * 0.07); ctx.fillStyle = '#00ff00';
       fn((t, x, y) => ctx.fillText(t, x, y)); fn((t, x, y) => ctx.fillText(t, x, y)); ctx.restore();
-      ctx.fillStyle = '#ff0000'; fn((t, x, y) => ctx.fillText(t, x, y));
+      ctx.fillStyle = faded ? '#ff00ff' : '#ff0000'; fn((t, x, y) => ctx.fillText(t, x, y));
     };
     ctx.save(); ctx.translate(w / 2, 0); ctx.scale(sx, 1);
     if (/\d/.test(big)) {
@@ -3314,7 +3286,18 @@
       const widths = big.split('').map((c) => (c === ':' ? colon : slot));
       let x = -widths.reduce((a, b) => a + b, 0) / 2;
       const xs = widths.map((wd) => { const c = x + wd / 2; x += wd; return c; });
-      ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], band.digitBase)));
+      const paused = state.timer.mode === 'pause';
+      ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], band.digitBase)), paused);
+      if (paused) {
+        // paused: the digits fade back (half their dots) and a pause mark lies over their middle, in the same ink
+        // and outline. A clear margin is cut around it first, so its outline separates it from the numbers.
+        const capH = band.capR * bigSize, bh = capH * 1.0, bw = bigSize * 0.17, gap = bigSize * 0.13, m = bigSize * 0.08;
+        const cx = big.includes(':') ? xs[big.indexOf(':')] : 0;      // centred on the colon, so no digit gets hidden
+        const y0 = band.digitBase - capH / 2 - bh / 2, x0 = cx - gap / 2 - bw;
+        ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillRect(x0 - m, y0 - m, bw * 2 + gap + m * 2, bh + m * 2); ctx.restore();
+        ink(() => { ctx.fillRect(x0, y0, bw, bh); ctx.fillRect(cx + gap / 2, y0, bw, bh); });
+      }
     } else {
       // a word in the digits' place (the name on the start screen): as big as fits the band
       let size = band.digit * 1.1;
@@ -3481,23 +3464,26 @@
   }
   const stopDither = (el) => { el._dither = (el._dither || 0) + 1; setMask(el, null); };
 
-  // ---- halftone icons: an SVG used as a mask over a dot pattern; the halo is a blurred copy
+  // ---- halftone icons: an SVG used as a mask over a dot pattern; the halo is a blurred copy.
+  // { fill } icons are solid ones from Phosphor (phosphoricons.com, MIT), drawn on their own 256 grid.
   const ICONS = {
-    refresh: '<path d="M20.2 12.5a8.2 8.2 0 1 1-2.6-6.4"/><path d="M20.4 3.6v5.2h-5.2"/>',
-    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.3" r="0.7" fill="#000"/>',
+    refresh: { fill: 'M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1-5.66-13.66l17-17-10.55-9.65-.25-.24a80,80,0,1,0-1.67,114.78,8,8,0,1,1,11,11.63A95.44,95.44,0,0,1,128,224h-1.32A96,96,0,1,1,195.75,60l10.93,10L226.34,50.3A8,8,0,0,1,240,56Z' },
+    info: { fill: 'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm-4,48a12,12,0,1,1-12,12A12,12,0,0,1,124,72Zm12,112a16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40a8,8,0,0,1,0,16Z' },
     back: '<path d="M19 12H6"/><path d="M11 6.5 5.5 12l5.5 5.5"/>',
     coffee: '<path d="M4.5 10.5h12v4a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M16.5 12h1.2a2.4 2.4 0 0 1 0 4.8h-1.6"/><path d="M8 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M11 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M14 2.8c-1 1.1 1 2.2 0 3.6"/>',
     close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
     play: '<path d="M8 5.2v13.6l10.6-6.8z" fill="#000"/>',
     skip: '<path d="M5.5 5.6v12.8l9.6-6.4z" fill="#000"/><path d="M18.6 5.4v13.2"/>',
-    undo: '<path d="M3.8 12.5a8.2 8.2 0 1 0 2.6-6.4"/><path d="M3.6 3.6v5.2h5.2"/>',
-    vol: '<path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/>',
-    mute: '<path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+    undo: { fill: 'M224,128a96,96,0,0,1-94.71,96H128A95.38,95.38,0,0,1,62.1,197.8a8,8,0,0,1,11-11.63A80,80,0,1,0,71.43,71.39a3.07,3.07,0,0,1-.26.25L60.63,81.29l17,17A8,8,0,0,1,72,112H24a8,8,0,0,1-8-8V56A8,8,0,0,1,29.66,50.3L49.31,70,60.25,60A96,96,0,0,1,224,128Z' },
+    vol: { fill: 'M160,32.25V223.69a8.29,8.29,0,0,1-3.91,7.18,8,8,0,0,1-9-.56l-65.57-51A4,4,0,0,1,80,176.16V79.84a4,4,0,0,1,1.55-3.15l65.57-51a8,8,0,0,1,10,.16A8.27,8.27,0,0,1,160,32.25ZM60,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H60a4,4,0,0,0,4-4V84A4,4,0,0,0,60,80Zm126.77,20.84a8,8,0,0,0-.72,11.3,24,24,0,0,1,0,31.72,8,8,0,1,0,12,10.58,40,40,0,0,0,0-52.88A8,8,0,0,0,186.74,100.84Zm40.89-26.17a8,8,0,1,0-11.92,10.66,64,64,0,0,1,0,85.34,8,8,0,1,0,11.92,10.66,80,80,0,0,0,0-106.66Z' },
+    mute: { fill: 'M245.66,146.34a8,8,0,0,1-11.32,11.32L216,139.31l-18.34,18.35a8,8,0,0,1-11.32-11.32L204.69,128l-18.35-18.34a8,8,0,0,1,11.32-11.32L216,116.69l18.34-18.35a8,8,0,0,1,11.32,11.32L227.31,128ZM60,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H60a4,4,0,0,0,4-4V84A4,4,0,0,0,60,80Zm97.15-54.15a8,8,0,0,0-10-.16l-65.57,51A4,4,0,0,0,80,79.84v96.32a4,4,0,0,0,1.55,3.15l65.57,51a8,8,0,0,0,9,.56,8.29,8.29,0,0,0,3.91-7.18V32.25A8.27,8.27,0,0,0,157.12,25.85Z' },
     brain: '<path d="M12 5.6c-1.1-1.8-4.4-1.8-5.3.4-2 .1-3.1 2.2-2.2 3.9-1.6 1-1.5 3.6.3 4.4-.3 2 1.7 3.5 3.5 2.8.8 1.6 2.9 1.7 3.7.2"/><path d="M12 5.6c1.1-1.8 4.4-1.8 5.3.4 2 .1 3.1 2.2 2.2 3.9 1.6 1 1.5 3.6-.3 4.4.3 2-1.7 3.5-3.5 2.8-.8 1.6-2.9 1.7-3.7.2"/><path d="M12 5.6v11.8"/><path d="M8.2 9.6c1 .2 1.6.9 1.6 1.9M15.8 9.6c-1 .2-1.6.9-1.6 1.9"/>',
     trash: '<path d="M4 7h16"/><path d="M9.5 7V4.6h5V7"/><path d="M6.4 7l1 12.1a1.7 1.7 0 0 0 1.7 1.5h5.8a1.7 1.7 0 0 0 1.7-1.5L17.6 7"/><path d="M10.2 10.6v6.4M13.8 10.6v6.4"/>',
     dice: '<g transform="rotate(-14 7.2 14.6)"><rect x="1.8" y="9.2" width="10.8" height="10.8" rx="2.4"/><circle cx="4.9" cy="12.3" r="1.05" fill="#000" stroke="none"/><circle cx="7.2" cy="14.6" r="1.05" fill="#000" stroke="none"/><circle cx="9.5" cy="16.9" r="1.05" fill="#000" stroke="none"/></g><g transform="rotate(12 16.6 8)"><rect x="11.2" y="2.6" width="10.8" height="10.8" rx="2.4"/><circle cx="14.3" cy="5.7" r="1.05" fill="#000" stroke="none"/><circle cx="18.9" cy="5.7" r="1.05" fill="#000" stroke="none"/><circle cx="14.3" cy="10.3" r="1.05" fill="#000" stroke="none"/><circle cx="18.9" cy="10.3" r="1.05" fill="#000" stroke="none"/></g>',
   };
-  const svgURL = (inner, halo) => `url("data:image/svg+xml,${encodeURIComponent(halo
+  const svgURL = (inner, halo) => `url("data:image/svg+xml,${encodeURIComponent(inner.fill ? (halo
+    ? `<svg xmlns='http://www.w3.org/2000/svg' viewBox='-64 -64 384 384'><defs><filter id='b' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='23'/></filter></defs><path filter='url(#b)' d='${inner.fill}' fill='#000' stroke='#000' stroke-width='40' stroke-linejoin='round'/></svg>`
+    : `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'><path d='${inner.fill}' fill='#000'/></svg>`) : halo
     ? `<svg xmlns='http://www.w3.org/2000/svg' viewBox='-6 -6 36 36'><defs><filter id='b' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='2.2'/></filter></defs><g filter='url(#b)' fill='none' stroke='#000' stroke-width='5.5' stroke-linecap='round' stroke-linejoin='round'>${inner}</g></svg>`
     : `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='#000' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'>${inner}</svg>`)}")`;
   document.querySelectorAll('[data-icon]').forEach((el) => {
@@ -4083,33 +4069,49 @@
   let drag = null, suppressClick = false;
   canvas.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0) return;
-    drag = { id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, view0: state.view, active: false, lastX: ev.clientX, lastT: performance.now(), v: 0 };
+    drag = { id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, view0: state.view, pan0: state.panY, active: false, lastX: ev.clientX, lastT: performance.now(), v: 0 };
   });
   canvas.addEventListener('pointermove', (ev) => {
     if (!drag || ev.pointerId !== drag.id) return;
     const dx = ev.clientX - drag.x0;
     if (!drag.active) {
-      if (Math.abs(dx) < 6 || Math.abs(dx) < Math.abs(ev.clientY - drag.y0) * 0.8) return;
-      drag.active = true; drag.x0 = ev.clientX; drag.lastX = ev.clientX;
+      // sideways turns the tank; up and down moves the view up and down (each drag picks one, so a turn never drifts the view)
+      const dy = ev.clientY - drag.y0;
+      if (Math.hypot(dx, dy) < 6) return;
+      drag.axis = Math.abs(dx) >= Math.abs(dy) * 0.8 ? 'x' : 'y';
+      drag.active = true; drag.x0 = ev.clientX; drag.y0 = ev.clientY; drag.lastX = ev.clientX; drag.pan0 = state.panY;
       try { canvas.setPointerCapture(ev.pointerId); } catch (e) { /* fine without */ }
-      document.body.classList.add('dragging'); state.dragging = true; state.driftPhase = 0;
+      document.body.classList.add('dragging');
+      if (drag.axis === 'y') state.panning = true; else { state.dragging = true; state.driftPhase = 0; }
     }
     const now = performance.now(), dtm = Math.max(8, now - drag.lastT);
     drag.v = drag.v * 0.5 + (-(ev.clientX - drag.lastX) * DEG_PER_PX / dtm * 1000) * 0.5;      // degrees per second
     drag.lastX = ev.clientX; drag.lastT = now;
+    if (drag.axis === 'y') {
+      // grab the scene: drag down and the view rises. One screen of drag moves one screen of view.
+      const per = 2 * baseDistance() * state.zoom * Math.tan(T.MathUtils.degToRad(camera.fov / 2)) / window.innerHeight;
+      const [lo, hi] = panLimits();
+      state.panY = clamp(drag.pan0 + (ev.clientY - drag.y0) * per, lo, hi);
+      return;
+    }
     state.view = drag.view0 - (ev.clientX - drag.x0) * DEG_PER_PX;
   });
   const endDrag = (ev) => {
     if (!drag || (ev && ev.pointerId !== drag.id)) return;
     if (drag.active) {
       suppressClick = true; setTimeout(() => { suppressClick = false; }, 0);
-      const v = performance.now() - drag.lastT > 120 ? 0 : drag.v;
-      state.view = Math.round((state.view + clamp(v * 0.22, -110, 110)) / 90) * 90;
-      state.dragging = false; document.body.classList.remove('dragging');
+      const v = performance.now() - drag.lastT > 120 || drag.axis === 'y' ? 0 : drag.v;
+      if (drag.axis !== 'y') state.view = Math.round((state.view + clamp(v * 0.22, -110, 110)) / 90) * 90;
+      state.dragging = false; state.panning = false; document.body.classList.remove('dragging');
     }
     drag = null;
   };
   const zoomMin = () => CLOSE_DIST / baseDistance();      // as close as the follow camera's close-up
+  // how far a vertical drag can move the view: a little when zoomed out, floor to just above the water when close in
+  function panLimits() {
+    const k = clamp((1 - state.zoom) / Math.max(0.05, 1 - zoomMin()), 0, 1);
+    return [lerp(-3, 4 - HOME_TARGET.y, k), lerp(3, U.uWater.value + 3 - HOME_TARGET.y, k)];
+  }
   // the brain is far bigger than a koi, so its close-up is framed by its size: about half the screen wide (more on a phone)
   function brainZoom() {
     if (!brainGeo) return zoomMin();
@@ -4210,7 +4212,7 @@
   window.addEventListener('keydown', (ev) => { if (ev.key === 'Tab' || ev.key.startsWith('Arrow')) keyboardUser = true; }, true);
   window.addEventListener('pointermove', () => { keyboardUser = false; }, { passive: true });
   const CONTROLS = '.dock, .rdock, .undo-wrap, .mode-tabs, .timer-actions, .drawer';
-  const busy = () => overControls || about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging || !!armed
+  const busy = () => overControls || about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging || state.panning
     || (keyboardUser && !!(document.activeElement && document.activeElement.closest && document.activeElement.closest(CONTROLS)));
   const focusRunning = () => state.timer.mode === 'run' && state.timer.kind === 'focus';
   function goQuiet() {
@@ -4319,8 +4321,14 @@
           if (want.y < U.uWater.value) want.y = Math.min(want.y, U.uWater.value - 1.2 - Math.sin(T.MathUtils.degToRad(camEl)) * dist);   // stay under the surface
           target.lerp(want, follow.cine ? 0.3 : 0.2);
         }
-      } else if (target.distanceToSquared(HOME_TARGET) > 1e-4) target.lerp(HOME_TARGET, homeRate);
-      else if (Math.abs(state.zoom - state.zoomTarget) < 0.005) { zoomRate = 2.2; homeRate = 0.15; }
+      } else {
+        // home, raised or lowered by a vertical drag; the room to move grows as you zoom in and shrinks back as you zoom out
+        const [lo, hi] = panLimits();
+        if (!state.panning) state.panY = clamp(state.panY, lo, hi);
+        const home = HOME_TARGET.clone(); home.y += clamp(state.panY, lo, hi);
+        if (target.distanceToSquared(home) > 1e-4) target.lerp(home, state.panning ? 0.35 : homeRate);
+        else if (Math.abs(state.zoom - state.zoomTarget) < 0.005) { zoomRate = 2.2; homeRate = 0.15; }
+      }
     }
     placeCamera();
     if (shake > 0.001) { const k = shake * 1.5; camera.position.x += Math.sin(t * 53) * k; camera.position.y += Math.sin(t * 41 + 1) * k * 0.8; shake *= Math.exp(-dt * 3.0); }
@@ -4383,6 +4391,7 @@
     followFind(i = 0, z) { if (finds[i]) { startFollow(finds[i], false); if (z) state.zoomTarget = state.zoom = z; } },
     foundScreen(i = 0) { const f = finds[i]; if (!f) return null; const p = f.root.localToWorld(V(0, HIT_Y[f.type] || 1.2, 0)).add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
     setZoom(z) { state.zoom = state.zoomTarget = z; },
+    cam() { return { panY: +state.panY.toFixed(2), ty: +target.y.toFixed(2), lim: panLimits().map((v) => +v.toFixed(2)), zoom: +state.zoom.toFixed(2), zmin: +zoomMin().toFixed(2), az: +state.az.toFixed(1), view: state.view }; },
     slow(f) { timeScale = f; },
     rescape,
     brainIntro, brainInfo() { return brain ? { phase: brain.phase, y: +brain.pos.y.toFixed(1), water: +U.uWater.value.toFixed(1) } : null; },
