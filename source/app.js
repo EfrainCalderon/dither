@@ -1,5 +1,5 @@
 /*
-  Dither 1.5.5
+  Dither 1.5.6
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -4185,8 +4185,8 @@
     if (brainHit(ev.clientX, ev.clientY)) { pokeBrain(); return; }
     const h = hitTest(ev.clientX, ev.clientY);
     if (h && h.fish) { pokeFish(h.fish); startFollow(h.fish, false); return; }
+    if (h && h.item) { pokeFind(h.item); startFollow(h.item, false); return; }     // a find does its trick and the camera moves in on it, like a koi
     if (follow) { endFollow(false); return; }                  // a click anywhere else goes back to the whole tank
-    if (h && h.item) { pokeFind(h.item); return; }
     const z = zoneAt(ev.clientX, ev.clientY);
     if (!z && baseHit(ev.clientX, ev.clientY)) { toggleBase(); return; }
     if (z === 'l') turn(-1);
