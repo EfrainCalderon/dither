@@ -1,5 +1,5 @@
 /*
-  Dither 1.5
+  Dither 1.5.1
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -930,20 +930,20 @@
     {
       const aspectV = (cols * cwDev) / (rows * chDev);
       const bandW = Math.round(cols * (aspectV < 0.8 ? 0.92 : aspectV < 1.25 ? 0.72 : 0.5));     // phones get most of the width
-      // sizes in cells. The digits sit under the session tabs (set in CSS: 12px from the top, 40px tall), with a
-      // little sky between them and the digits, and 16px down to "Start".
+      // sizes in cells. Spacing is one 24px step throughout: the tabs sit 24px from the top (CSS, 40px tall), the
+      // digits' outline starts 24px under them, and Start / Pause starts 24px under the outline.
       const pxc = chDev / dpr, GAP = 24 / pxc, sxr = chDev / cwDev;
       const capR = digitCapRatio();                                                 // how tall the typeface's digits are, per unit of size
       const digit = Math.min(rows * 0.145, (bandW / sxr) * 0.94 / 2.8);          // "25:00" fits the band
       const lab = Math.max(digit * 0.34, 15 / pxc);
-      const digitBase = 0.6 + capR * digit, labBase = digitBase + GAP + 0.73 * lab;
       const oyCss = (H - rows * chDev / dpr) / 2, tabsEl = document.getElementById('modeTabs');
-      const tabsTop = (tabsEl && parseFloat(getComputedStyle(tabsEl).top)) || 12;
-      const digitTopPx = tabsTop + 40 + 22;
-      const bandTop = Math.max(1, Math.round((digitTopPx - oyCss) / pxc - 0.6));
+      const tabsTop = (tabsEl && parseFloat(getComputedStyle(tabsEl).top)) || 24;
+      const capTopPx = tabsTop + 40 + 24 + pxc;                                   // + one cell: the outline ring sits above the cap
+      const bandTop = Math.max(1, Math.floor((capTopPx - oyCss) / pxc - 0.6));
+      const digitBase = (capTopPx - oyCss) / pxc - bandTop + capR * digit, labBase = digitBase + GAP + 0.73 * lab;
       const bandH = Math.min(rows - 2, Math.ceil(digitBase + 1.2)), bandX = Math.round((cols - bandW) / 2);
       const lTop = bandTop + Math.max(0, Math.floor(labBase - lab * 1.05)), lH = Math.min(rows - lTop, Math.ceil(lab * 1.45) + 2);
-      var tl = { digit, lab, digitBase, labBase, capR, actTop: digitBase + 16 / pxc };
+      var tl = { digit, lab, digitBase, labBase, capR, actTop: digitBase + 1 + 24 / pxc };
       const F = clamp(Math.round(cwDev / 3), 2, 4);
       band = { bandH, bandW, bandX, bandTop, lTop, lH, F, ...tl };
       asciiU.uOvRect.value.set(bandX - 1, rows - (bandTop + bandH) - 1, bandX + bandW + 1, rows);      // where the timer's outline can be (cells, from the bottom)
@@ -3063,21 +3063,31 @@
     return audioCtx;
   }
   // one soft, round tone: a slow swell, a slight shimmer from two close sine waves, a long fade
+  // the chime when a session ends: an 8-bit level-up ("Level Up Enhancement" by Lesiakower, Pixabay 153002).
+  // On the web it's decoded into memory ahead of time (loadChime on the first press), so it rings right on time
+  // even in a background tab; opened from a file, or before it has decoded, a plain <audio> element plays it.
+  const CHIME = 'audio/level-up.mp3';
+  let chimeBuf = null, chimeLoading = null, chimeEl = null;
+  function loadChime() {
+    if (chimeBuf || chimeLoading || !/^https?:$/.test(location.protocol)) return;
+    const ctx = audio(); if (!ctx) return;
+    chimeLoading = fetch(CHIME).then((r) => { if (!r.ok) throw new Error(`${CHIME}: ${r.status}`); return r.arrayBuffer(); })
+      .then((ab) => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej))).then((b) => { chimeBuf = b; })
+      .catch((err) => { console.warn('Dither chime did not load', err); chimeLoading = null; });
+  }
   function bell(kind = 'focus-done') {
     if (!state.sound) return;
-    const ctx = audio(); if (!ctx) return;
-    const when = ctx.currentTime + 0.03, base = kind === 'focus-done' ? 432 : 486;
-    const out = ctx.createGain(); out.gain.value = kind === 'focus-done' ? 0.16 : 0.11;
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600; lp.Q.value = 0.2;
-    out.connect(lp).connect(ctx.destination);
-    [[1, 1, 6.5], [1.004, 0.55, 6.0], [2.0, 0.12, 3.2], [2.99, 0.035, 1.8]].forEach(([r, a, d]) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine'; o.frequency.value = base * r;
-      g.gain.setValueAtTime(0.0001, when);
-      g.gain.exponentialRampToValueAtTime(a, when + 0.09);
-      g.gain.exponentialRampToValueAtTime(0.0001, when + d);
-      o.connect(g).connect(out); o.start(when); o.stop(when + d + 0.1);
-    });
+    const vol = kind === 'focus-done' ? 0.8 : 0.6;      // the end of a rest is a little softer
+    const ctx = audio();
+    if (ctx && chimeBuf) {
+      const src = ctx.createBufferSource(), g = ctx.createGain();
+      src.buffer = chimeBuf; g.gain.value = vol; src.connect(g).connect(ctx.destination); src.start(ctx.currentTime + 0.02);
+      return;
+    }
+    loadChime();
+    if (!chimeEl) { chimeEl = new Audio(CHIME); chimeEl.preload = 'auto'; }
+    chimeEl.volume = vol; chimeEl.currentTime = 0;
+    chimeEl.play().catch(() => {});
   }
 
   // ================================================================ timer
@@ -3100,7 +3110,7 @@
     if (state.pendingItem > 0) revealItem(kind !== 'focus');
   }
   function timerPress() {
-    audio();     // unlock sound on the first press
+    audio(); loadChime();     // unlock sound on the first press, and get the chime ready
     const tm = state.timer;
     if (tm.mode === 'idle') startSession('focus');
     else if (tm.mode === 'ready') startSession(tm.kind);
@@ -4391,6 +4401,12 @@
     followFind(i = 0, z) { if (finds[i]) { startFollow(finds[i], false); if (z) state.zoomTarget = state.zoom = z; } },
     foundScreen(i = 0) { const f = finds[i]; if (!f) return null; const p = f.root.localToWorld(V(0, HIT_Y[f.type] || 1.2, 0)).add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
     setZoom(z) { state.zoom = state.zoomTarget = z; },
+    layout() {
+      const oy = (window.innerHeight - grid.rows * grid.chCss) / 2, c = grid.chCss, r = (id) => document.getElementById(id).getBoundingClientRect();
+      const base = oy + (band.bandTop + band.digitBase) * c, cap = base - band.capR * (drawnDigit || band.digit) * c;
+      const vis = (id) => { const b = r(id); return b.height ? +b.top.toFixed(1) : null; };
+      return { cell: +c.toFixed(2), tabsTop: +r('modeTabs').top.toFixed(1), tabsBottom: +r('modeTabs').bottom.toFixed(1), digitsTop: +(cap - c).toFixed(1), digitsBottom: +(base + c).toFixed(1), startTop: vis('startBtn'), pauseTop: vis('pauseBtn') };
+    },
     cam() { return { panY: +state.panY.toFixed(2), ty: +target.y.toFixed(2), lim: panLimits().map((v) => +v.toFixed(2)), zoom: +state.zoom.toFixed(2), zmin: +zoomMin().toFixed(2), az: +state.az.toFixed(1), view: state.view }; },
     slow(f) { timeScale = f; },
     rescape,

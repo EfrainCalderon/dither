@@ -12,7 +12,7 @@ A Pomodoro timer that lives in a tiny halftone aquarium. Finish a focus session,
 - **Play with it.** Drag sideways to turn the tank, or up and down to look higher or lower (there's more room to look around when you're zoomed in). Click a koi and it jumps (an arc, a belly flop or a stone skip) while the camera follows it up close; click anywhere else, press Esc, or zoom out to come back. You can also scroll or pinch to zoom right in.
 - **A brain says hello.** On the title screen a giant brain splashes into the tank. It floats there until you start your first focus.
 - **Controls stay put.** About and **New tank** sit bottom left, sound bottom right (a slider on desktop). They fade back while a focus session runs and come forward when you move. New tank has a 3-second undo.
-- **Music** loops under focus and rest, fading in and out with the timer. If you come back to a session and the music is waiting (browsers need a tap before sound can play), a play button shows next to the volume.
+- **Music** loops under focus and rest, fading in and out with the timer. An 8-bit level-up chime rings when a session ends. If you come back to a session and the music is waiting (browsers need a tap before sound can play), a play button shows next to the volume.
 - **Keeps your screen on** while a session runs, so a phone propped on your desk doesn't dim and lock mid-focus. Paused or idle, it sleeps as usual.
 - **Works in the background.** Switch to another tab and the timer keeps going: the bell rings and the music fades out right on time. Open it in two tabs and they stay in step, so a session only counts once.
 - **About** has the credits and a **Buy me a coffee** button that opens a tip window right in the page.
@@ -41,7 +41,9 @@ npm run lab        # writes ../../dither-fish-lab.html: the app plus a fish tuni
 - Focus: "Lofi Loop" — Music by [Marek Zielinski](https://pixabay.com/users/zephiramusic-54643547/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=589689) from [Pixabay](https://pixabay.com/music//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=589689)
 - Rest: "Lofi Relaxing" — Music by [Marek Zielinski](https://pixabay.com/users/zephiramusic-54643547/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=582284) from [Pixabay](https://pixabay.com/music//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=582284)
 
-Pixabay license certificates are in `audio/licenses/`.
+- Chime: "Level Up Enhancement" — Sound Effect by [Lesiakower](https://pixabay.com/users/lesiakower-25701529/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=153002) from [Pixabay](https://pixabay.com//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=153002)
+
+Pixabay license certificates for the music are in `audio/licenses/`.
 
 ## Type
 

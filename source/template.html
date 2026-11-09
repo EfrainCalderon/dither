@@ -49,6 +49,7 @@
   .icon-btn:hover .ht-halo, .icon-btn:focus-visible .ht-halo { opacity: 1; }
   .icon-btn:hover .ht-icon, .icon-btn:focus-visible .ht-icon { transform: scale(1.06); }
   .icon-btn:focus-visible { outline: none; }
+  .icon-btn .ht-icon { background: var(--ink); }      /* the corner icons are solid; their hover halo stays dotted */
   .tip { position: absolute; left: 50%; bottom: calc(100% - 2px); transform: translate(-50%, 6px); white-space: nowrap; font-size: max(var(--t-sm), calc(var(--t-sm) * var(--ui))); line-height: 1; padding: 4px 2px;
          opacity: 0; pointer-events: none; transition: opacity 200ms ease, transform 200ms ease; }
   .icon-btn:hover .tip, .icon-btn:focus-visible .tip { opacity: 1; transform: translate(-50%, 0); }
@@ -58,11 +59,11 @@
   #timerHit { position: fixed; z-index: 3; background: transparent; border: 0; border-radius: 12px; padding: 0; }
   #timerHit:focus-visible { outline: none; }
 
-  .dock { position: fixed; z-index: 4; left: calc(14px + env(safe-area-inset-left)); bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; gap: calc(24px - 10px * var(--ui)); align-items: center; }
+  .dock { position: fixed; z-index: 4; left: calc(24px - 10px * var(--ui) + env(safe-area-inset-left)); bottom: calc(24px - 10px * var(--ui) + env(safe-area-inset-bottom)); display: flex; gap: calc(24px - 10px * var(--ui)); align-items: center; }
   .dithering { -webkit-mask-repeat: repeat; mask-repeat: repeat; }
 
-  /* ---------- bottom right: music volume */
-  .rdock { position: fixed; z-index: 4; right: calc(14px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px;
+  /* ---------- bottom right: music volume. The corners keep 24px from the edges to what you see (icons sit inset in their hit areas). */
+  .rdock { position: fixed; z-index: 4; right: calc(22px + env(safe-area-inset-right)); bottom: calc(24px - 10px * var(--ui) + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px;
            height: calc(66px * var(--ui)); }      /* same height as the left dock, so both rows of buttons share a centerline */
   .dock { height: calc(66px * var(--ui)); }
   /* a soft backdrop behind the bottom controls while they show, so they read over the tank up close */
@@ -76,6 +77,7 @@
     .vol input[type=range] { display: none; }
     .vol .tip { display: none; }
     .vol .icon-btn { width: 48px; height: 48px; }
+    .rdock { right: calc(15px * var(--ui) + env(safe-area-inset-right)); }
   }
   /* while a focus session runs, everything but the timer steps back after a few still seconds (body.quiet, set in code) */
   :is(.dock, .rdock, .scrim, .mode-tabs, .timer-actions) { transition: opacity 600ms ease; }
@@ -117,7 +119,7 @@
   /* ---------- the timer's controls. Above the digits: the session tabs, plain words with the current one on a soft
      pill. The three are the same width, so the middle one sits right over the middle of the digits.
      Below: Start (the main action, solid and larger) or Pause (quieter), with skip as a bare icon beside it while a session runs. */
-  .mode-tabs { position: fixed; z-index: 4; left: 50%; top: calc(12px + env(safe-area-inset-top)); transform: translateX(-50%);
+  .mode-tabs { position: fixed; z-index: 4; left: 50%; top: calc(24px + env(safe-area-inset-top)); transform: translateX(-50%);
                width: max-content; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
   .mode-tabs[hidden] { display: none; }
   .mode-tabs button { position: relative; height: 40px; padding: 0 16px; border: 0; background: transparent; color: var(--abtn-bg);
@@ -131,9 +133,11 @@
   .timer-actions[hidden] { display: none; }
   .ta-row { position: relative; display: flex; }
   .timer-actions .ghost { --bg: var(--abtn-bg); --fg: var(--abtn-ink); }
-  .ghost.primary { height: max(44px, calc(48px * var(--ui))); padding: 0 calc(26px * var(--ui)) 0 calc(20px * var(--ui)); }
-  .ghost.primary .ht-icon { --s: calc(18px * var(--ui)); }
-  .timer-actions .ghost.tonal { --bg: var(--abtn-tone); --fg: var(--abtn-bg); height: max(40px, calc(40px * var(--ui))); padding: 0 calc(22px * var(--ui)); }
+  /* Start and Pause share one size (so the row never jumps); Start leads by its solid fill, Pause is tonal */
+  .timer-actions .ghost .ht-text { font-size: max(var(--t-md), calc(var(--t-lg) * var(--ui))); }
+  .ghost.primary { height: max(48px, calc(56px * var(--ui))); padding: 0 calc(28px * var(--ui)) 0 calc(22px * var(--ui)); gap: calc(12px * var(--ui)); }
+  .ghost.primary .ht-icon { --s: calc(20px * var(--ui)); }
+  .timer-actions .ghost.tonal { --bg: var(--abtn-tone); --fg: var(--abtn-bg); height: max(48px, calc(56px * var(--ui))); padding: 0 calc(28px * var(--ui)); }
   .skip { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 6px; width: 44px; height: 44px; padding: 0; border: 0; background: none; border-radius: 12px; display: grid; place-items: center; }
   .skip[hidden] { display: none; }
   .skip .ht-icon { --s: 24px; background: var(--abtn-bg); filter: drop-shadow(0 0 1px var(--abtn-ink)) drop-shadow(0 0 1px var(--abtn-ink)); }
@@ -175,6 +179,7 @@
   @keyframes steam { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-2px) rotate(4deg); } }
   .credits { margin: 4px 0 0; font-size: var(--t-sm); line-height: 1.3; font-weight: 400; color: var(--ink); opacity: 0.85; }
   .credits a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .credits .nw { white-space: nowrap; }
   .credits a:hover { opacity: 1; }
   #bmc-wbtn { display: none !important; }
   @media (min-width: 480px) { #bmc-iframe { right: calc(50% - 210px) !important; bottom: 60px !important; transform-origin: 50% 60% !important; } }
@@ -267,7 +272,8 @@
     <h1 class="title" id="appName"><span class="ht-text">Dither by </span><a class="ht-text" href="https://www.efrain.design" target="_blank" rel="noopener">Efrain Calderon</a></h1>
     <a class="coffee" id="coffeeBtn" href="https://www.buymeacoffee.com/efrainfm" target="_blank" rel="noopener"><span class="ht-text">Buy me a coffee</span><span class="cup"><span class="ht-icon" data-icon="coffee"></span></span></a>
     <p class="credits">
-      Music by <a href="https://pixabay.com/users/zephiramusic-54643547/?utm_source=link-attribution&amp;utm_medium=referral&amp;utm_campaign=music&amp;utm_content=589689" target="_blank" rel="noopener">Marek Zielinski</a> from <a href="https://pixabay.com/music//?utm_source=link-attribution&amp;utm_medium=referral&amp;utm_campaign=music&amp;utm_content=589689" target="_blank" rel="noopener">Pixabay</a>
+      Music by <a href="https://pixabay.com/users/zephiramusic-54643547/?utm_source=link-attribution&amp;utm_medium=referral&amp;utm_campaign=music&amp;utm_content=589689" target="_blank" rel="noopener">Marek Zielinski</a> <span class="nw">from <a href="https://pixabay.com/music//?utm_source=link-attribution&amp;utm_medium=referral&amp;utm_campaign=music&amp;utm_content=589689" target="_blank" rel="noopener">Pixabay</a></span><br>
+      Sound effect by <a href="https://pixabay.com/users/lesiakower-25701529/?utm_source=link-attribution&amp;utm_medium=referral&amp;utm_campaign=music&amp;utm_content=153002" target="_blank" rel="noopener">Lesiakower</a> <span class="nw">from <a href="https://pixabay.com//?utm_source=link-attribution&amp;utm_medium=referral&amp;utm_campaign=music&amp;utm_content=153002" target="_blank" rel="noopener">Pixabay</a></span>
     </p>
   </div>
 </div>
