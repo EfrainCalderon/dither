@@ -1,5 +1,5 @@
 /*
-  Dither 1.5.2
+  Dither 1.5.3
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -184,7 +184,8 @@
     name: 'Dither',          // fixed now; no renaming
     wordsStyle: ['dots', 'geist', 'doto'].includes(saved.wordsStyle) ? saved.wordsStyle : 'dots',
     baseOn: saved.baseOn === true,
-    brain: saved.brain === true,              // 'done with work' leaves a brain floating until the next focus
+    brain: saved.brain === true,              // the welcome brain is floating in the tank
+    brainGone: saved.brainGone === true,      // it has been sent away (first Start or New tank) and doesn't come back
     musicVol: typeof saved.musicVol === 'number' ? saved.musicVol : 0.6,
     musicMuted: saved.musicMuted === true,             // off by default; a click on the base turns it on
     sound: saved.sound ?? true,
@@ -207,7 +208,7 @@
       localStorage.setItem(STORE_KEY, JSON.stringify({
         seed: state.seed, shape: state.shape, name: state.name, sound: state.sound,
         growth: state.growth, evap: state.evap, fish: state.fish, pendingFish: state.pendingFish, items: state.items, pendingItem: state.pendingItem, fishDay: state.fishDay, timer: state.timer, cycle: state.cycle,
-        wordsStyle: state.wordsStyle, baseOn: state.baseOn, brain: state.brain, musicVol: state.musicVol, musicMuted: state.musicMuted,
+        wordsStyle: state.wordsStyle, baseOn: state.baseOn, brain: state.brain, brainGone: state.brainGone, musicVol: state.musicVol, musicMuted: state.musicMuted,
       }));
     } catch (e) { /* storage blocked: still works, just won't remember */ }
   }
@@ -3254,6 +3255,7 @@
     const itemsChanged = JSON.stringify(o.items || []) !== JSON.stringify(state.items) || (o.pendingItem || 0) !== state.pendingItem;
     if (itemsChanged) { state.items = (o.items || []).filter((i) => i && i.type in SPECIALS); state.pendingItem = o.pendingItem || 0; syncItems(); }
     if (o.seed && (o.seed !== state.seed || o.shape !== state.shape)) { state.seed = o.seed; if (SHAPES[o.shape]) state.shape = o.shape; generate(state.seed); updateDrawer(); }
+    if (o.brainGone) state.brainGone = true;
     if (!!o.brain !== !!state.brain) { state.brain = !!o.brain; if (state.brain) makeBrain(false); else brainLeave(); syncBrainUI(); }
     if (typeof o.musicVol === 'number') { state.musicVol = o.musicVol; state.musicMuted = o.musicMuted === true; syncVolUI(); }
     if (timerChanged) { clearTimeout(endAlarm); if (state.timer.mode === 'run') endAlarm = setTimeout(heartbeat, Math.max(0, state.timer.endsAt - Date.now()) + 50); renderTimerText(true); }
@@ -3619,6 +3621,7 @@
     state.seed = randomSeed(); state.growth = 0; state.evap = 0;
     state.shape = Math.random() < 0.35 ? 'oval' : 'box';       // most tanks are rectangular; about 1 in 3 comes up oval
     exitGrowthPreview();
+    brainLeave();      // the welcome brain goes with the old tank (it doesn't come back on undo), so it never seems stuck in there
     offerTankUndo(() => withStatic(() => { Object.assign(state, prev); generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }));
     withStatic(() => { generate(state.seed); save(); updateDrawer(); syncShapeSeg(); }, startTankUndoClock);
   }
@@ -3736,13 +3739,13 @@
     b.mesh.scale.set(BRAIN_SCALE * sx, BRAIN_SCALE * sy, BRAIN_SCALE * sx);
   }
   // forget the brain right away (not when the animation ends), so a reload or a background tab can't bring it back
-  function brainLeave() { if (brain && brain.phase !== 'leaving') { brain.phase = 'leaving'; brain.leave = 0; } if (state.brain) { state.brain = false; save(); } }
+  function brainLeave() { if (brain && brain.phase !== 'leaving') { brain.phase = 'leaving'; brain.leave = 0; } if (state.brain || !state.brainGone) { state.brain = false; state.brainGone = true; save(); } }
   function pokeBrain() { if (!brain || brain.phase !== 'float') return; brain.vel.y -= 9; addRipple(brain.pos.x, brain.pos.z, 1.6, U.uTime.value); splash(brain.pos.x, U.uWater.value, brain.pos.z, 60, 1.6); }
   function syncBrainUI() { document.body.classList.toggle('has-brain', !!state.brain); }
   // the intro: on the title screen a giant brain splashes into the tank. It floats there (and stays across reloads)
-  // until the first Start, when it dithers away.
+  // until the first Start or New tank, when it dithers away.
   function brainIntro() {
-    if (brain || state.brain || state.timer.mode !== 'idle') return;
+    if (brain || state.brain || state.brainGone || state.timer.mode !== 'idle') return;
     makeBrain(true); state.brain = true; save(); syncBrainUI();
   }
 
