@@ -1,5 +1,5 @@
 /*
-  Dither 1.3.4
+  Dither 1.3.5
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -24,6 +24,7 @@
   const APP = 'Dither';
   const FONT_MONO = '"Menlo", "SF Mono", "DejaVu Sans Mono", "Consolas", monospace';
   const FONT_UI = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+  const FONT_PIXEL = 'Pixel, ui-monospace, Menlo, Consolas, monospace';   // the timer, buttons and about card: Jersey 25, inlined in the page as 'Pixel' (see build.mjs), so it never waits on a server
 
   const M = {
     none: 0, water: 1, surface: 2, substrate: 3, sand: 4, rock: 5, wood: 6, moss: 7,
@@ -212,6 +213,19 @@
   const UP = new T.Vector3(0, 1, 0);
   const V = (x, y, z) => new T.Vector3(x, y, z);
   const vec3 = (hex) => { const c = parseInt(hex.slice(1), 16); return new T.Vector3(((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255); };
+  // WCAG contrast: relative luminance of an sRGB colour (0..1 per channel), and the ratio between two of them (1..21)
+  const relLum = (c) => { const f = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * f(c.x) + 0.7152 * f(c.y) + 0.0722 * f(c.z); };
+  const contrast = (a, b) => { const la = relLum(a), lb = relLum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
+  const BTN_DARK = '#0f2a3d', BTN_LIGHT = '#f2f8f6';      // solid buttons: one is the fill, the other the words (about 14:1 together)
+  const btnContrast = {};
+  // pick whichever fill stands out more from what's behind the button; the words take the other colour
+  function solidButton(prefix, behind, key) {
+    const dark = vec3(BTN_DARK), light = vec3(BTN_LIGHT), cd = contrast(dark, behind), cl = contrast(light, behind);
+    const useDark = cd >= cl, root = document.documentElement.style;
+    root.setProperty(`${prefix}-bg`, useDark ? BTN_DARK : BTN_LIGHT);
+    root.setProperty(`${prefix}-ink`, useDark ? BTN_LIGHT : BTN_DARK);
+    btnContrast[key] = { fillVsSky: +(useDark ? cd : cl).toFixed(2), textVsFill: +contrast(dark, light).toFixed(2) };
+  }
 
   // ================================================================ tank footprint (shape)
   // A superellipse: n=2 is an oval, n≈4 a soft rounded rectangle, n≈14 almost a box.
@@ -2682,7 +2696,10 @@
       const Lc = 0.2126 * card.x + 0.7152 * card.y + 0.0722 * card.z;
       root.setProperty('--card-bg', `rgb(${Math.round(card.x * 255)}, ${Math.round(card.y * 255)}, ${Math.round(card.z * 255)})`);
       root.setProperty('--card-ink', Lc > 0.3 ? '#143650' : '#eef5f3');
+      solidButton('--cbtn', card, 'coffee');
     }
+    solidButton('--btn', bot, 'dock');          // new tank: against the bottom of the sky
+    solidButton('--abtn', upper, 'actions');    // reset timer / call it a day / undo: against the sky under the timer
   }
 
   // ================================================================ sound: a soft synthesized bell
@@ -2888,9 +2905,13 @@
     ctx.save(); ctx.translate(w / 2, 0); ctx.scale(sx, 1);
     if (/\d/.test(big)) {
       let bigSize = band.digit;
-      { const units = big.split('').reduce((a, c) => a + (c === ':' ? 0.32 : 0.62), 0), maxW = (w / sx) * 0.94; if (bigSize * units > maxW) bigSize = maxW / units; }   // never wider than the band
-      ctx.font = `800 ${bigSize}px ${FONT_UI}`;
-      const slot = bigSize * 0.62, colon = bigSize * 0.32;    // fixed-width slots: no jiggle
+      ctx.font = `100px ${FONT_PIXEL}`;
+      // slot widths from the typeface itself: every digit gets the widest digit's width plus a little air (same on every screen)
+      const dW = Math.max(...'0123456789'.split('').map((d) => ctx.measureText(d).width)) / 100 * 1.06;
+      const cW = Math.max(ctx.measureText(':').width / 100 * 1.3, dW * 0.55);
+      { const units = big.split('').reduce((a, c) => a + (c === ':' ? cW : dW), 0), maxW = (w / sx) * 0.94; if (bigSize * units > maxW) bigSize = maxW / units; }   // never wider than the band
+      ctx.font = `${bigSize}px ${FONT_PIXEL}`;
+      const slot = bigSize * dW, colon = bigSize * cW;    // fixed-width slots: no jiggle
       const widths = big.split('').map((c) => (c === ':' ? colon : slot));
       let x = -widths.reduce((a, b) => a + b, 0) / 2;
       const xs = widths.map((wd) => { const c = x + wd / 2; x += wd; return c; });
@@ -2898,13 +2919,13 @@
     } else {
       // a word in the digits' place (the name on the start screen): as big as fits the band
       let size = band.digit * 1.1;
-      ctx.font = `800 ${size}px ${FONT_UI}`;
+      ctx.font = `${size}px ${FONT_PIXEL}`;
       const maxW = (w / sx) * 0.96, mw = ctx.measureText(big).width;
-      if (mw > maxW) { size *= maxW / mw; ctx.font = `800 ${size}px ${FONT_UI}`; }
+      if (mw > maxW) { size *= maxW / mw; ctx.font = `${size}px ${FONT_PIXEL}`; }
       ink((draw) => draw(big, 0, band.digitBase));
     }
     if (label) {
-      ctx.font = `800 ${h * 0.24}px ${FONT_UI}`;
+      ctx.font = `${h * 0.24}px ${FONT_PIXEL}`;
       if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.max(1, Math.round(h * 0.015))}px`;
       const tw = ctx.measureText(label).width, iw = icon ? h * 0.17 : 0, gap = icon ? h * 0.09 : 0;
       const x0 = -(tw + iw + gap) / 2, base = h * 0.93;
@@ -2961,8 +2982,8 @@
     ctx.save(); ctx.translate(ctx.canvas.width / 2, -offY); ctx.scale(sx, 1);
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
     let size = B.lab * F;
-    ctx.font = `600 ${size}px ${FONT_UI}`;
-    { const need = ctx.measureText(label).width * 1.1 + (icon ? size : 0), maxW = (ctx.canvas.width / sx) * 0.92; if (need > maxW) { size *= maxW / need; ctx.font = `600 ${size}px ${FONT_UI}`; } }
+    ctx.font = `${size}px ${FONT_PIXEL}`;
+    { const need = ctx.measureText(label).width * 1.1 + (icon ? size : 0), maxW = (ctx.canvas.width / sx) * 0.92; if (need > maxW) { size *= maxW / need; ctx.font = `${size}px ${FONT_PIXEL}`; } }
     if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(size * 0.05)}px`;
     const tw = ctx.measureText(label).width, iw = icon ? size * 0.58 : 0, gap = icon ? size * 0.38 : 0;
     const x0 = -(tw + iw + gap) / 2, base = B.labBase * F;
@@ -3920,7 +3941,7 @@
   syncBrainUI();
   save(); updateDrawer(); updateSkyLabel();
   const go = () => { renderTimerText(true); drawCdLabel(); requestAnimationFrame(loop); };
-  (document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
+  (document.fonts && document.fonts.ready ? Promise.race([document.fonts.load(`40px ${FONT_PIXEL}`).then(() => document.fonts.ready), new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
   document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { renderTimerText(true); drawCdLabel(); });
   wake();
 
@@ -3956,6 +3977,7 @@
     freezeStatic(v) { staticAnim = { phase: 'hold', t: 0, swap() {} }; U.uStatic.value = v; },
     baseBox() { let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (let k = 0; k < 24; k++) { const p = boundary((k / 24) * Math.PI * 2, 1.07).setY(-2.6).project(camera); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); } return { x0, x1, y0, tank: tankScreenBox().y0, rows: grid.rows * grid.chCss }; },
     baseState() { return { lit: baseLit(), glow: +U.uGlow.value.toFixed(2), target: +glowTarget.toFixed(2), night: skyInfo.night, on: state.baseOn }; },
+    buttons() { return JSON.parse(JSON.stringify(btnContrast)); },
     info() { return { fish: fishObjs.map((o) => [o.mode, +(o.mt || 0).toFixed(2), +o.p.x.toFixed(1), +o.p.y.toFixed(1), +o.p.z.toFixed(1), +o.mesh.scale.x.toFixed(2)]), pending: state.pendingFish, total: state.fish.length, found: found && found.type, anim: !!(found && found.anim), animT: found && found.anim ? +found.anim.t.toFixed(2) : -1, zoom: +state.zoom.toFixed(2), timer: state.timer.mode, splashes: splashes.length, sparkles: sparkles.length }; },
     fishRot(i) { const o = fishObjs[i]; if (!o) return null; const r = o.mesh.rotation; o.mesh.updateMatrixWorld(); const n = V(1, 0, 0).transformDirection(o.mesh.matrixWorld); return { r: [r.x, r.y, r.z, r.order].map((v) => (typeof v === 'number' ? +v.toFixed(2) : v)), nose: [n.x, n.y, n.z].map((v) => +v.toFixed(2)), prof: o.intro && +o.intro.profile.toFixed(2) }; },
     fishScreen(i) { const o = fishObjs[i]; return o ? toScreen(o.p) : null; },

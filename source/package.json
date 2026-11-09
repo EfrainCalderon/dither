@@ -3,10 +3,15 @@
   "private": true,
   "type": "module",
   "description": "A Pomodoro timer that lives in a tiny halftone aquarium.",
-  "scripts": { "build": "node build.mjs", "lab": "node build.mjs --lab" },
+  "scripts": {
+    "build": "node build.mjs",
+    "lab": "node build.mjs --lab"
+  },
   "devDependencies": {
     "@fontsource-variable/doto": "^5.3.0",
     "@fontsource/geist-mono": "^5.3.0",
+    "@fontsource/jersey-25": "^5.3.0",
+    "@fontsource/vt323": "^5.3.0",
     "esbuild": "^0.20.2",
     "three": "^0.160.0"
   }

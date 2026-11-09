@@ -18,11 +18,18 @@
     --accent: #9fe3d8;
     --shadow: none;
     --ui: 1;              /* the bottom controls scale with the window (set in code, never below ~0.78) */
+    /* type scale (pixel type reads small, so nothing goes below --t-sm). Steps grow by about 1.25×. */
+    --t-sm: 20px;         /* the smallest text anywhere: credits, tooltips */
+    --t-md: 24px;         /* buttons */
+    --t-lg: 30px;         /* about card lines */
+    --t-xl: 72px;         /* about card title */
+    /* solid buttons: fill + words, set in code from the sky so the fill always stands out (see solidButton) */
+    --btn-bg: #0f2a3d; --btn-ink: #f2f8f6; --abtn-bg: #0f2a3d; --abtn-ink: #f2f8f6; --cbtn-bg: #0f2a3d; --cbtn-ink: #f2f8f6;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #0a0f18; overflow: hidden; touch-action: none; }   /* pinches belong to the tank, not the page */
   .drawer { touch-action: pan-y; }
-  body { font: 13px/1.35 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  body { font: 17px/1.2 Pixel, ui-monospace, Menlo, Consolas, monospace; color: var(--ink); -webkit-font-smoothing: antialiased; }
   #c { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; cursor: default; }
   #c.edge-l { cursor: w-resize; } #c.edge-r { cursor: e-resize; } #c.water, #c.base { cursor: pointer; } #c.grab { cursor: grab; }
   body.dragging, body.dragging #c { cursor: grabbing !important; }
@@ -31,7 +38,7 @@
 
   /* ---------- halftone: real text and icons, painted with a dot pattern */
   .ht-text { color: transparent; background-image: radial-gradient(circle, var(--ink) 1.05px, transparent 1.35px); background-size: 2.5px 2.5px;
-             -webkit-background-clip: text; background-clip: text; font-weight: 800; }
+             -webkit-background-clip: text; background-clip: text; font-weight: 400; }
   .ht-icon { display: block; width: var(--s); height: var(--s); background-image: radial-gradient(circle, var(--ink) 1.15px, transparent 1.5px); background-size: 2.6px 2.6px;
              -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; transition: transform 250ms ease; }
   .ht-halo { position: absolute; left: 50%; top: 50%; width: calc(var(--s) * 1.5); height: calc(var(--s) * 1.5); transform: translate(-50%, -50%);
@@ -41,7 +48,7 @@
   .icon-btn:hover .ht-halo, .icon-btn:focus-visible .ht-halo { opacity: 1; }
   .icon-btn:hover .ht-icon, .icon-btn:focus-visible .ht-icon { transform: scale(1.06); }
   .icon-btn:focus-visible { outline: none; }
-  .tip { position: absolute; left: 50%; bottom: calc(100% - 2px); transform: translate(-50%, 6px); white-space: nowrap; font-size: calc(17px * var(--ui)); line-height: 1; padding: 4px 2px;
+  .tip { position: absolute; left: 50%; bottom: calc(100% - 2px); transform: translate(-50%, 6px); white-space: nowrap; font-size: max(var(--t-sm), calc(var(--t-sm) * var(--ui))); line-height: 1; padding: 4px 2px;
          opacity: 0; pointer-events: none; transition: opacity 200ms ease, transform 200ms ease; }
   .icon-btn:hover .tip, .icon-btn:focus-visible .tip { opacity: 1; transform: translate(-50%, 0); }
   .dock .icon-btn:first-child .tip { left: calc(33px * var(--ui)); }
@@ -89,10 +96,15 @@
     .vol input[type=range] { width: 44px; }
   }
 
-  /* ---------- ghost buttons: an outline, halftone words and icon */
-  .ghost { position: relative; display: inline-flex; align-items: center; gap: calc(9px * var(--ui)); height: calc(44px * var(--ui)); padding: 0 calc(20px * var(--ui)) 0 calc(15px * var(--ui)); border-radius: 999px;
-           border: 1.5px solid var(--ink); background: transparent; transition: background-color 200ms ease, transform 200ms ease; }
-  .ghost:hover, .ghost:focus-visible { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+  /* ---------- pill buttons: solid fill, solid words and icon. The fill flips dark/light with the sky behind it (solidButton in code). */
+  .ghost { --bg: var(--btn-bg); --fg: var(--btn-ink); --ink: var(--fg);
+           position: relative; display: inline-flex; align-items: center; gap: calc(9px * var(--ui)); height: max(40px, calc(44px * var(--ui))); padding: 0 calc(20px * var(--ui)) 0 calc(15px * var(--ui)); border-radius: 999px;
+           border: 0; background: var(--bg); color: var(--fg); transition: background-color 200ms ease, transform 200ms ease; }
+  .timer-actions .ghost { --bg: var(--abtn-bg); --fg: var(--abtn-ink); }
+  .ghost:hover, .ghost:focus-visible { background: color-mix(in srgb, var(--bg) 84%, var(--fg)); }
+  :is(.ghost, .coffee) .ht-text { color: var(--fg); background: none; -webkit-background-clip: border-box; background-clip: border-box; }
+  :is(.ghost, .coffee) .ht-icon { background: var(--fg); }
+  :is(.ghost, .coffee) .ht-halo { display: none; }
   .ghost:active { transform: scale(0.97); }
   .ghost[hidden], .icon-btn[hidden] { display: none; }
   .ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 70%, transparent); }
@@ -100,7 +112,7 @@
   .ghost .ht-halo { --s: calc(24px * var(--ui)); left: calc(27px * var(--ui)); }
   .ghost:hover .ht-halo, .ghost:focus-visible .ht-halo { opacity: 1; }
   .ghost:hover .ht-icon { transform: rotate(-8deg) scale(1.06); }
-  .ghost .ht-text { font-size: calc(18px * var(--ui)); line-height: 1; }
+  .ghost .ht-text { font-size: max(var(--t-sm), calc(var(--t-md) * var(--ui))); line-height: 1; }
 
   /* ---------- paused: reset, with a confirm step (stays up while paused; doesn't fade with the dock) */
   .timer-actions { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); }
@@ -129,22 +141,22 @@
   .glass .edge { position: absolute; left: -48px; top: -48px; width: calc(100% + 96px); height: calc(100% + 96px); pointer-events: none; z-index: -1; opacity: 0; transition: opacity 600ms ease 120ms; }
   .about.on .glass .edge { opacity: 1; transition: none; }
   .glass .close { position: absolute; right: 10px; top: 10px; --s: 22px; width: 44px; height: 44px; }
-  .title { margin: 0; font-size: 52px; line-height: 1.05; letter-spacing: -0.01em; }
-  .line { margin: 0; font-size: 22px; }
+  .title { margin: 0; font-size: var(--t-xl); line-height: 1; }
+  .line { margin: 0; font-size: var(--t-lg); }
   .line a { position: relative; text-decoration: none; }
   .line a::after { content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 2px; border-radius: 1px; background: var(--ink); opacity: 0.85; transition: opacity 200ms, transform 200ms; }
   .line a:hover::after { opacity: 1; transform: scaleY(1.5); }
-  .coffee { position: relative; display: inline-flex; align-items: center; gap: 10px; padding: 10px 20px 10px 16px; border-radius: 999px; text-decoration: none; font-size: 22px;
-            background: color-mix(in srgb, var(--ink) 8%, transparent); transition: background-color 220ms ease, transform 220ms ease, filter 260ms ease; }
+  .coffee { --bg: var(--cbtn-bg); --fg: var(--cbtn-ink); --ink: var(--fg); color: var(--fg); position: relative; display: inline-flex; align-items: center; gap: 10px; padding: 10px 20px 10px 16px; border-radius: 999px; text-decoration: none; font-size: var(--t-lg);
+            background: var(--bg); transition: background-color 220ms ease, transform 220ms ease, filter 260ms ease; }
   .coffee .ht-icon, .coffee .ht-halo { --s: 30px; }
   .coffee .ht-halo { left: 31px; opacity: 1; }
-  .coffee:hover, .coffee:focus-visible { background: color-mix(in srgb, var(--ink) 16%, transparent); transform: scale(1.04);
+  .coffee:hover, .coffee:focus-visible { background: color-mix(in srgb, var(--bg) 84%, var(--fg)); transform: scale(1.04);
     filter: drop-shadow(0 0 6px var(--glow)) drop-shadow(0 0 20px color-mix(in srgb, var(--glow) 75%, transparent)); }
   .coffee:hover .ht-halo, .coffee:focus-visible .ht-halo { --s: 44px; }
   .coffee:hover .ht-icon, .coffee:focus-visible .ht-icon { animation: steam 900ms ease-in-out infinite alternate; }
   @keyframes steam { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-2px) rotate(4deg); } }
   .coffee:focus-visible { outline: none; }
-  .credits { margin: 4px 0 0; font-size: 12.5px; line-height: 1.6; font-weight: 500; color: var(--ink); opacity: 0.72; }
+  .credits { margin: 4px 0 0; font-size: var(--t-sm); line-height: 1.3; font-weight: 400; color: var(--ink); opacity: 0.85; }
   .credits a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
   .credits a:hover { opacity: 1; }
 
@@ -163,7 +175,8 @@
   .words.doto { font-family: 'Doto', ui-monospace, monospace; font-variation-settings: 'ROND' 100; }
   .words.doto .lab { font-weight: 900; } .words.doto .big { font-weight: 900; }
 
-  /* ---------- prototype drawer (temporary) */
+  /* ---------- prototype drawer (temporary): the admin panel keeps Inter */
+  .tune, .drawer { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
   .tune { position: fixed; z-index: 4; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip);
           backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-size: 12px; transition: opacity 700ms; }
   body:not(.admin) .tune, body:not(.admin) .drawer { display: none !important; }

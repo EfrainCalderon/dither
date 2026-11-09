@@ -15,6 +15,8 @@ A Pomodoro timer that lives in a tiny halftone aquarium. Finish a focus session,
 
 Everything is drawn as halftone dots: three.js renders the scene into a tiny image, one pixel per dot, and a second pass turns each pixel into a dot.
 
+The type is a pixel font, Jersey 25, built into the page so it shows right away on any device (no font server to wait on), and nothing is smaller than 20px. Buttons are solid and flip between dark and light with the sky behind them, so their words always pass WCAG contrast.
+
 ## Run it
 
 It's one self-contained file: open `index.html` in a browser, or serve the folder as a static site (no build step needed to deploy).
@@ -36,5 +38,9 @@ npm run lab        # writes ../../dither-fish-lab.html: the app plus a fish tuni
 - Rest: "Lofi Relaxing" — Music by [Marek Zielinski](https://pixabay.com/users/zephiramusic-54643547/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=582284) from [Pixabay](https://pixabay.com/music//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=582284)
 
 Pixabay license certificates are in `audio/licenses/`.
+
+## Type
+
+[Jersey 25](https://fonts.google.com/specimen/Jersey+25) by Sarah Cadigan-Fried, under the SIL Open Font License.
 
 Created by [Efrain Calderon](https://www.efrain.design).
