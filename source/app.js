@@ -1,5 +1,5 @@
 /*
-  Dither 1.5.1
+  Dither 1.5.2
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -693,9 +693,13 @@
         }
         vec4 o = texelFetch(uOverlay, ivec2(cell), 0);
         float fill = o.r * o.a, glow = o.g * o.a;
-        bool faded = o.b * o.a > 0.5;      // blue marks ink drawn faded (the digits behind the pause mark): half the dots, smaller
-        if (fill > 0.35 && !(faded && bayer4(cell) > 0.5) && !(uOverlayDim < 0.99 && bayer4(cell) > 0.6) && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
-          float r = rMax * (0.55 + 0.45 * fill) * (1.05 + 0.1 * uOverlayGlow) * (faded ? 0.8 : 1.0);
+        // blue marks ink drawn hollow (the digits while paused): only the cells on the glyph's edge keep a dot
+        bool hollow = o.b * o.a > 0.5, edge = false;
+        if (hollow && fill > 0.35) {
+          for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) { vec4 n = texelFetch(uOverlay, ivec2(cell) + ivec2(dx, dy), 0); if (n.r * n.a <= 0.35) edge = true; }
+        }
+        if (fill > 0.35 && (!hollow || edge) && !(uOverlayDim < 0.99 && bayer4(cell) > 0.6) && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
+          float r = rMax * (0.55 + 0.45 * fill) * (1.05 + 0.1 * uOverlayGlow);
           float m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
           gl_FragColor = vec4(mix(bg, uOverlayCol, m), 1.0); return;
         }
@@ -3040,7 +3044,7 @@
     root.setProperty('--chip', light ? 'rgba(255, 255, 255, 0.38)' : 'rgba(8, 14, 22, 0.42)');
     root.setProperty('--shadow', light ? 'none' : '0 1px 10px rgba(0,0,0,.3)');
     root.setProperty('--glow', light ? '#ffffff' : '#a9e4ff');
-    root.setProperty('--scrim', light ? 'rgba(244, 250, 252, 0.7)' : 'rgba(5, 12, 20, 0.6)');      // the backdrop behind the bottom controls
+    root.setProperty('--halo', light ? 'rgba(244, 250, 252, 0.92)' : 'rgba(5, 12, 20, 0.88)');      // a thin contrasting edge around the corner icons, so they read over the tank
     {
       const card = rows[1].clone().lerp(vec3('#ffffff'), 0.2 * dayF).lerp(vec3('#000000'), 0.3 * (1 - dayF));
       const Lc = 0.2126 * card.x + 0.7152 * card.y + 0.0722 * card.z;
@@ -3137,7 +3141,7 @@
     $('live').textContent = `Skipped. ${KIND_NAME[next]} is next.`;
   }
   // the controls around the timer: session tabs above the digits; start / pause below, with skip beside it while
-  // a session runs. Paused, a pause mark is drawn into the digits themselves (drawTimer)
+  // a session runs. Paused, the digits themselves turn hollow (drawTimer + ASCII_FRAG)
   function setShown(el, on) {
     if (!el || el._shown === on) return;
     el._shown = on;
@@ -3296,18 +3300,8 @@
       const widths = big.split('').map((c) => (c === ':' ? colon : slot));
       let x = -widths.reduce((a, b) => a + b, 0) / 2;
       const xs = widths.map((wd) => { const c = x + wd / 2; x += wd; return c; });
-      const paused = state.timer.mode === 'pause';
+      const paused = state.timer.mode === 'pause';      // paused, the digits are drawn hollow: just their outline
       ink((draw) => big.split('').forEach((c, i) => draw(c, xs[i], band.digitBase)), paused);
-      if (paused) {
-        // paused: the digits fade back (half their dots) and a pause mark lies over their middle, in the same ink
-        // and outline. A clear margin is cut around it first, so its outline separates it from the numbers.
-        const capH = band.capR * bigSize, bh = capH * 1.0, bw = bigSize * 0.17, gap = bigSize * 0.13, m = bigSize * 0.08;
-        const cx = big.includes(':') ? xs[big.indexOf(':')] : 0;      // centred on the colon, so no digit gets hidden
-        const y0 = band.digitBase - capH / 2 - bh / 2, x0 = cx - gap / 2 - bw;
-        ctx.save(); ctx.globalCompositeOperation = 'destination-out';
-        ctx.fillRect(x0 - m, y0 - m, bw * 2 + gap + m * 2, bh + m * 2); ctx.restore();
-        ink(() => { ctx.fillRect(x0, y0, bw, bh); ctx.fillRect(cx + gap / 2, y0, bw, bh); });
-      }
     } else {
       // a word in the digits' place (the name on the start screen): as big as fits the band
       let size = band.digit * 1.1;
@@ -4216,13 +4210,13 @@
   });
   // The controls are always there. While a focus session runs they fade back after a few still seconds, so the
   // timer is the one thing on screen; moving the pointer, a tap or a key brings them right back.
-  let idleTimer = 0, overControls = false;
+  let idleTimer = 0;
   const QUIET_MS = 4000;
   let keyboardUser = false;      // focus only keeps the controls up for people moving around with the keyboard
   window.addEventListener('keydown', (ev) => { if (ev.key === 'Tab' || ev.key.startsWith('Arrow')) keyboardUser = true; }, true);
   window.addEventListener('pointermove', () => { keyboardUser = false; }, { passive: true });
   const CONTROLS = '.dock, .rdock, .undo-wrap, .mode-tabs, .timer-actions, .drawer';
-  const busy = () => overControls || about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging || state.panning
+  const busy = () => about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging || state.panning
     || (keyboardUser && !!(document.activeElement && document.activeElement.closest && document.activeElement.closest(CONTROLS)));
   const focusRunning = () => state.timer.mode === 'run' && state.timer.kind === 'focus';
   function goQuiet() {
@@ -4240,7 +4234,6 @@
   window.addEventListener('pointerdown', () => wake(), { passive: true });
   window.addEventListener('keydown', () => wake());
   window.addEventListener('focusin', (ev) => { if (ev.target.closest && ev.target.closest(CONTROLS)) wake(); });
-  document.querySelectorAll(CONTROLS).forEach((el) => { el.addEventListener('mouseenter', () => { overControls = true; wake(); }); el.addEventListener('mouseleave', () => { overControls = false; wake(); }); });
   // admin view: type the word anywhere (not in a field)
   let typed = '';
   const setAdmin = (on) => { document.body.classList.toggle('admin', on); if (!on) { $('drawer').classList.remove('on'); $('tune').classList.remove('on'); } try { localStorage.setItem('dither.admin', on ? '1' : '0'); } catch (e) { /* fine */ } };

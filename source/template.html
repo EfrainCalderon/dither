@@ -47,9 +47,10 @@
              -webkit-mask: var(--mb) center / contain no-repeat; mask: var(--mb) center / contain no-repeat; opacity: 0; transition: opacity 350ms ease; pointer-events: none; }
   .icon-btn { --s: calc(46px * var(--ui)); position: relative; width: calc(66px * var(--ui)); height: calc(66px * var(--ui)); padding: 0; border: 0; background: none; border-radius: 18px; display: grid; place-items: center; }
   .icon-btn:hover .ht-halo, .icon-btn:focus-visible .ht-halo { opacity: 1; }
-  .icon-btn:hover .ht-icon, .icon-btn:focus-visible .ht-icon { transform: scale(1.06); }
   .icon-btn:focus-visible { outline: none; }
   .icon-btn .ht-icon { background: var(--ink); }      /* the corner icons are solid; their hover halo stays dotted */
+  /* no backdrop behind the corners: the icons and slider carry a thin edge in the opposite colour, like the digits' outline */
+  .dock .icon-btn, .vol .icon-btn, .vol input[type=range] { filter: drop-shadow(0 0 1px var(--halo)) drop-shadow(0 0 1px var(--halo)); }
   .tip { position: absolute; left: 50%; bottom: calc(100% - 2px); transform: translate(-50%, 6px); white-space: nowrap; font-size: max(var(--t-sm), calc(var(--t-sm) * var(--ui))); line-height: 1; padding: 4px 2px;
          opacity: 0; pointer-events: none; transition: opacity 200ms ease, transform 200ms ease; }
   .icon-btn:hover .tip, .icon-btn:focus-visible .tip { opacity: 1; transform: translate(-50%, 0); }
@@ -66,9 +67,6 @@
   .rdock { position: fixed; z-index: 4; right: calc(22px + env(safe-area-inset-right)); bottom: calc(24px - 10px * var(--ui) + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px;
            height: calc(66px * var(--ui)); }      /* same height as the left dock, so both rows of buttons share a centerline */
   .dock { height: calc(66px * var(--ui)); }
-  /* a soft backdrop behind the bottom controls while they show, so they read over the tank up close */
-  .scrim { position: fixed; left: 0; right: 0; bottom: 0; height: calc(190px * var(--ui) + env(safe-area-inset-bottom)); z-index: 3; pointer-events: none;
-           background: linear-gradient(to top, var(--scrim, rgba(5,12,20,.6)) 0%, color-mix(in srgb, var(--scrim, rgba(5,12,20,.6)) 55%, transparent) 50%, transparent 100%); }
   .vol { display: flex; align-items: center; gap: 2px; }
   .vol .icon-btn { --s: calc(30px * var(--ui)); width: calc(48px * var(--ui)); height: calc(48px * var(--ui)); }
   .vol input[type=range] { width: calc(92px * var(--ui)); accent-color: var(--ink); cursor: pointer; }
@@ -80,19 +78,19 @@
     .rdock { right: calc(15px * var(--ui) + env(safe-area-inset-right)); }
   }
   /* while a focus session runs, everything but the timer steps back after a few still seconds (body.quiet, set in code) */
-  :is(.dock, .rdock, .scrim, .mode-tabs, .timer-actions) { transition: opacity 600ms ease; }
-  body.quiet :is(.dock, .rdock, .scrim, .mode-tabs, .timer-actions) { opacity: 0.28; }
+  :is(.dock, .rdock, .mode-tabs, .timer-actions) { transition: opacity 600ms ease; }
+  body.quiet :is(.dock, .rdock, .mode-tabs, .timer-actions) { opacity: 0.28; }
 
   /* ---------- touch screens: every control gets at least a 44pt target (Apple's minimum), without changing how it looks.
      An invisible layer extends each small button or link to 44px each way. */
   @media (pointer: coarse) {
-    .ghost::before, .vol .icon-btn::before, .title a::before, .mode-tabs button::before { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; min-width: 100%; height: 44px; min-height: 100%; transform: translate(-50%, -50%); }
+    .vol .icon-btn::before, .title a::before, .mode-tabs button::before { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; min-width: 100%; height: 44px; min-height: 100%; transform: translate(-50%, -50%); }
     .vol input[type=range] { min-height: 44px; }
     .credits a { padding: 6px 2px 23px; margin: 0 -2px; }      /* reach down into the card's empty bottom edge, not up into the coffee button */
   }
 
   /* ---------- 8-bit corners: buttons and tabs are boxes with a two-step pixel staircase at each corner (--p is one step) */
-  :is(.ghost, .mode-tabs button, .coffee, .coffee .cup) { --p: 4px; border-radius: 0;
+  .ghost::before, .ghost::after, .mode-tabs button, .coffee, .coffee .cup { --p: 4px; border-radius: 0;
     clip-path: polygon(0 calc(var(--p) * 2), var(--p) calc(var(--p) * 2), var(--p) var(--p), calc(var(--p) * 2) var(--p), calc(var(--p) * 2) 0,
       calc(100% - var(--p) * 2) 0, calc(100% - var(--p) * 2) var(--p), calc(100% - var(--p)) var(--p), calc(100% - var(--p)) calc(var(--p) * 2), 100% calc(var(--p) * 2),
       100% calc(100% - var(--p) * 2), calc(100% - var(--p)) calc(100% - var(--p) * 2), calc(100% - var(--p)) calc(100% - var(--p)), calc(100% - var(--p) * 2) calc(100% - var(--p)), calc(100% - var(--p) * 2) 100%,
@@ -100,20 +98,26 @@
   .coffee .cup { --p: 7px; }
   /* ---------- buttons: solid fill, solid words and icon. The fill flips dark/light with the sky behind it (solidButton in code). */
   .ghost { --bg: var(--btn-bg); --fg: var(--btn-ink); --ink: var(--fg);
-           position: relative; display: inline-flex; align-items: center; gap: calc(9px * var(--ui)); height: max(40px, calc(44px * var(--ui))); padding: 0 calc(20px * var(--ui)) 0 calc(15px * var(--ui));
-           border: 0; background: var(--bg); color: var(--fg); transition: background-color 200ms ease, transform 200ms ease; }
-  .timer-actions .ghost { --bg: var(--abtn-bg); --fg: var(--abtn-ink); }
-  .ghost:hover, .ghost:focus-visible { background: color-mix(in srgb, var(--bg) 84%, var(--fg)); }
+           position: relative; display: inline-flex; align-items: center; gap: calc(9px * var(--ui)); height: max(44px, calc(44px * var(--ui))); padding: 0 calc(20px * var(--ui)) 0 calc(15px * var(--ui));
+           border: 0; background: none; color: var(--fg); isolation: isolate; transition: transform 150ms ease; --sh: var(--btn-tone); }
+  /* the fill (::before) and, on hover, a hard 8-bit shadow under it (::after) in the sky's tone; the button lifts a touch */
+  .ghost::before, .ghost::after { content: ''; position: absolute; inset: 0; pointer-events: none; }
+  .ghost::before { z-index: -1; background: var(--bg); }
+  .ghost::after { z-index: -2; background: var(--sh); opacity: 0; transition: transform 150ms ease, opacity 150ms ease; }
+  .ghost:hover, .ghost:focus-visible { transform: translateY(-2px); }
+  .ghost:hover::after, .ghost:focus-visible::after { opacity: 1; transform: translateY(5px); }
+  .ghost:active { transform: translateY(1px); }
+  .ghost:active::after { transform: translateY(1px); }
+  .timer-actions .ghost { --bg: var(--abtn-bg); --fg: var(--abtn-ink); --sh: var(--abtn-tone); }
   .ghost .ht-text { color: var(--fg); background: none; -webkit-background-clip: border-box; background-clip: border-box; }
   :is(.ghost, .coffee) .ht-icon { background: var(--fg); }
   .ghost .ht-halo { display: none; }
-  .ghost:active { transform: scale(0.97); }
   .ghost[hidden], .icon-btn[hidden] { display: none; }
-  .ghost:focus-visible { outline: none; box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--glow) 70%, transparent); }
+  .ghost:focus-visible { outline: none; }
+  .ghost:focus-visible::before { box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--glow) 70%, transparent); }
   .ghost .ht-icon { --s: calc(24px * var(--ui)); }
   .ghost .ht-halo { --s: calc(24px * var(--ui)); left: calc(27px * var(--ui)); }
   .ghost:hover .ht-halo, .ghost:focus-visible .ht-halo { opacity: 1; }
-  .ghost:hover .ht-icon { transform: rotate(-8deg) scale(1.06); }
   .ghost .ht-text { font-size: max(var(--t-sm), calc(var(--t-md) * var(--ui))); line-height: 1; }
 
   /* ---------- the timer's controls. Above the digits: the session tabs, plain words with the current one on a soft
@@ -137,10 +141,11 @@
   .timer-actions .ghost .ht-text { font-size: max(var(--t-md), calc(var(--t-lg) * var(--ui))); }
   .ghost.primary { height: max(48px, calc(56px * var(--ui))); padding: 0 calc(28px * var(--ui)) 0 calc(22px * var(--ui)); gap: calc(12px * var(--ui)); }
   .ghost.primary .ht-icon { --s: calc(20px * var(--ui)); }
-  .timer-actions .ghost.tonal { --bg: var(--abtn-tone); --fg: var(--abtn-bg); height: max(48px, calc(56px * var(--ui))); padding: 0 calc(28px * var(--ui)); }
+  .timer-actions .ghost.tonal { --bg: var(--abtn-tone); --fg: var(--abtn-bg); --sh: color-mix(in srgb, var(--abtn-tone) 55%, var(--abtn-bg)); height: max(48px, calc(56px * var(--ui))); padding: 0 calc(28px * var(--ui)); }
   .skip { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 6px; width: 44px; height: 44px; padding: 0; border: 0; background: none; border-radius: 12px; display: grid; place-items: center; }
   .skip[hidden] { display: none; }
-  .skip .ht-icon { --s: 24px; background: var(--abtn-bg); filter: drop-shadow(0 0 1px var(--abtn-ink)) drop-shadow(0 0 1px var(--abtn-ink)); }
+  .skip .ht-icon { --s: 24px; background: var(--abtn-bg); }
+  .skip { filter: drop-shadow(0 0 1px var(--abtn-ink)) drop-shadow(0 0 1px var(--abtn-ink)); }
   .skip:hover .ht-icon { transform: translateX(2px); }
 
   /* ---------- undo: centered, level with the dock; fades away in 4 seconds */
@@ -238,7 +243,6 @@
 <canvas id="c" aria-hidden="true"></canvas>
 <button id="timerHit" aria-label="Start a 25 minute focus session"></button>
 
-<div class="scrim" aria-hidden="true"></div>
 <div class="dock" role="toolbar" aria-label="Tank">
   <button class="icon-btn" id="aboutBtn" aria-label="About" aria-haspopup="dialog"><span class="ht-halo"></span><span class="ht-icon" data-icon="info"></span><span class="tip ht-text" aria-hidden="true">About</span></button>
   <button class="ghost" id="rescapeBtn"><span class="ht-halo"></span><span class="ht-icon" data-icon="refresh"></span><span class="ht-text">New tank</span></button>
