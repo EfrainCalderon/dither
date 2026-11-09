@@ -1,5 +1,5 @@
 /*
-  Dither 1.3.5
+  Dither 1.4
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -19,7 +19,11 @@
   // ================================================================ config
   const TANK = { w: 90, h: 26, d: 40 };            // long, low and shallow
   const MAX_POMS = 10;
-  const FOCUS_MIN = 25, REST_MIN = 5;
+  const FOCUS_MIN = 25;
+  // a Pomodoro round: focus, short rest, three times over, then a long rest after the 4th focus
+  const LEN_MIN = { focus: 25, short: 5, long: 15 };
+  const KIND_NAME = { focus: 'Focus', short: 'Short rest', long: 'Long rest' };
+  const ROUND = 4;
   const STORE_KEY = 'dither.v15';
   const APP = 'Dither';
   const FONT_MONO = '"Menlo", "SF Mono", "DejaVu Sans Mono", "Consolas", monospace';
@@ -29,11 +33,12 @@
   const M = {
     none: 0, water: 1, surface: 2, substrate: 3, sand: 4, rock: 5, wood: 6, moss: 7,
     stem: 8, stemRed: 9, grass: 10, bubble: 11, glass: 13, leaf: 14, mote: 15, crypt: 17, waterline: 18,
+    coral: 12, coralTip: 16, marimo: 19, stickG: 20, stickR: 21, haloG: 37, haloR: 38, inhaler: 39,
     shell: 22, sanddollar: 23, brass: 24, ipod: 25, ipodWheel: 26, ipodScreen: 27, duck: 28, beak: 29,
-    beadA: 30, beadB: 31, ticket: 32, usb: 33, usbMetal: 34, pebble: 35, cowrie: 36,
+    sub: 30, ink: 31, ticket: 32, cardBack: 33, usbMetal: 34, cardRed: 35, cardBlue: 36,
     fishOrange: 40, fishRed: 41, fishWhite: 42, fishBlack: 43, fishGold: 44, fishBlue: 45, fishBronze: 46,
     base: 47, glow: 48, digit: 49, diverSuit: 50, glassDark: 51, paper: 52, shellPink: 53, floppy: 54,
-    masonBrass: 55, cdFace: 56, cdInk: 57, cdA: 58, cdB: 59, cdC: 60, drop: 61, haze: 62, shade: 63,
+    cardCream: 55, cardYellow: 56, cardInk: 57, cardFlesh: 58, drop: 61, haze: 62, shade: 63,
   };
   const ROWS = 64;
 
@@ -63,13 +68,21 @@
     [M.ipodScreen]: [' .:-=====#', '',      ['#1e2a22', '#3a4a3e', '#6a7a68', '#9fb09a'], 0.6, 0],
     [M.duck]:       [' .:-=+*o0@', '',      ['#7a5a00', '#c89a10', '#ffd23a', '#fff3a0'], 0.5, 0],
     [M.beak]:       [' .:-=+*>>>', '',      ['#7a3000', '#c85a10', '#ff8a2a', '#ffc080'], 0.5, 0],
-    [M.beadA]:      [' .ooooOOO0', '',      ['#103a4a', '#1a6a8a', '#3aa8c8', '#9ae8ff'], 0.4, 0],
-    [M.beadB]:      [' .ooooOOO0', '',      ['#5a1a30', '#a03050', '#e0607a', '#ffb0c0'], 0.4, 0],
+    [M.sub]:        [' .:-=+*o0@', '',      ['#6a4a00', '#c88a00', '#ffc21a', '#fff0a0'], 0.5, 0],
+    [M.ink]:        [' .:-=+*#%@', '',      ['#08080c', '#18181e', '#2e2e38', '#55555f'], 0.6, 0],
     [M.ticket]:     [' .:-=+*#%@', '',      ['#861a46', '#d2306c', '#ff5f92', '#ff9abb'], 0.5, 0],     // (slot reused) the brain
-    [M.usb]:        [' .:-=+*#%@', '',      ['#101a3a', '#203a7a', '#3a6ad0', '#9ab8ff'], 0.55, 0],
     [M.usbMetal]:   [' .:-=+*#%@', '',      ['#4a4a50', '#80808a', '#b8b8c4', '#f0f0f8'], 0.5, 0],
-    [M.pebble]:     [' .:-=+*#%@', '',      ['#2a2a30', '#4a4a58', '#7a7a8a', '#b0b0c0'], 0.55, 0],
-    [M.cowrie]:     [' .:-=+*o0@', '',      ['#3a2a1a', '#7a5a3a', '#c09a6a', '#f4dcb8'], 0.5, 0],
+    [M.coral]:      [' .:-=+*o0@', '',      ['#8a0a30', '#e8164a', '#ff3a60', '#ff7a8c'], 0.5, 0],
+    [M.coralTip]:   [' .:-=+*o0@', '',      ['#a84a08', '#ff8a1a', '#ffb43a', '#ffd870'], 0.5, 0],
+    [M.marimo]:     [' .,:;*o0@#', '',      ['#0a2410', '#1a5222', '#3a8f34', '#8fd860'], 0.5, 0],
+    [M.stickG]:     [' .:-=+*#%@', '',      ['#1a7a10', '#36f02a', '#6aff40', '#aaff6a'], 0.5, 0],
+    [M.stickR]:     [' .:-=+*#%@', '',      ['#7a0a0a', '#f01c1c', '#ff4436', '#ff806e'], 0.5, 0],
+    [M.haloG]:      [' ..::--==#', '',      ['#145a10', '#2ec82a', '#5aff3a', '#a8ff7a'], 0, 0],
+    [M.haloR]:      [' ..::--==#', '',      ['#5a1010', '#d82424', '#ff4a3a', '#ff9a88'], 0, 0],
+    [M.inhaler]:    [' .:-=+*#%@', '',      ['#6a0810', '#c8141e', '#ec2a30', '#ff5a5a'], 0.5, 0],
+    [M.cardBack]:   [' .:-=+*#%@', '',      ['#0e1e4a', '#1e3a8a', '#3a64c8', '#9ab8ff'], 0.5, 0],
+    [M.cardRed]:    [' .:-=+*#%@', '',      ['#5a1010', '#b0281e', '#e2483a', '#ff9a88'], 0.5, 0],
+    [M.cardBlue]:   [' .:-=+*#%@', '',      ['#0e2a4a', '#1e5a9a', '#3a8ad8', '#a0d4ff'], 0.5, 0],
     [M.fishOrange]: [' .:=+*o0@#', '',      ['#5a2008', '#b84a12', '#f47a28', '#ffb26a'], 0.45, 0],
     [M.fishRed]:    [' .:=+*o0@#', '',      ['#4a0c0c', '#9a1c1c', '#e0402e', '#ff8a6a'], 0.45, 0],
     [M.fishWhite]:  [' .:=+*o0@#', '',      ['#6a6a66', '#b4b4ae', '#ebe9e1', '#ffffff'], 0.45, 0],
@@ -85,12 +98,10 @@
     [M.paper]:      [' .:-=+*#%@', '',      ['#77776f', '#b8b8ae', '#e9e8df', '#ffffff'], 0.5, 0],
     [M.shellPink]:  [' .:-=+*#%@', '',      ['#6a3836', '#b26a62', '#ee9e90', '#ffd6cb'], 0.5, 0],
     [M.floppy]:     [' .:-=+*#%@', '',      ['#3e0c22', '#7c2240', '#b23e62', '#de6a8a'], 0.5, 0],     // (slot reused) the brain's folds
-    [M.masonBrass]: [' .:-=+*#%@', '',      ['#5a400e', '#a47c1c', '#ecbd3c', '#fff2b0'], 0.5, 0],
-    [M.cdFace]:     [' .:-=+*#%@', '',      ['#7b8088', '#b8bdc6', '#e6e9ee', '#ffffff'], 0.5, 0],
-    [M.cdInk]:      [' .:-=+*#%@', '',      ['#0e1a2e', '#1d3152', '#2c4a78', '#46689e'], 0.5, 0],
-    [M.cdA]:        [' .:-=+*#%@', '',      ['#5a3a6a', '#9a6ab8', '#d2a2f2', '#f6e0ff'], 0.5, 0],
-    [M.cdB]:        [' .:-=+*#%@', '',      ['#2a5a6a', '#4a9ab0', '#8ae0f0', '#dafbff'], 0.5, 0],
-    [M.cdC]:        [' .:-=+*#%@', '',      ['#5a5a2a', '#9aa04a', '#d8e07a', '#f8ffd0'], 0.5, 0],
+    [M.cardCream]:  [' .:-=+*#%@', '',      ['#7a6a4a', '#c8b48a', '#f2e4c0', '#fffaf0'], 0.5, 0],
+    [M.cardYellow]: [' .:-=+*#%@', '',      ['#6a4a08', '#c8960e', '#f6c836', '#fff0a0'], 0.5, 0],
+    [M.cardInk]:    [' .:-=+*#%@', '',      ['#0a0a0e', '#1a1a20', '#2c2c34', '#4a4a54'], 0.5, 0],
+    [M.cardFlesh]:  [' .:-=+*#%@', '',      ['#7a4a3a', '#d09078', '#f4c0a4', '#ffe6d6'], 0.5, 0],
     [M.drop]:       [' .:-=+*#%@', '',      ['#174a63', '#2878a0', '#56b4d8', '#d6f6ff'], 0.5, 0],
   };
 
@@ -126,26 +137,44 @@
     { name: 'platinum',  w: 0.6, base: M.fishWhite, body: [2.0, 0.72, 0.6], tail: 0.9, size: [1.2, 1.6], speed: 2.3 },
   ];
 
-  // found objects: one may turn up in a fresh tank. Tiers keep the funny ones rare.
-  const FOUND = {
-    common: ['sanddollar', 'cowrie', 'pebbles'],          // conch retired: too blobby at this dot size
-    rare: ['duck', 'ipod', 'key', 'bracelet', 'usb', 'boat', 'cd'],   // ticket stub + floppy retired
-    kitsch: ['diver', 'chest'],
-    ultra: ['mason'],
+  // found objects. A fresh tank may come with one common find. The specials are earned: every long rest
+  // drops one into the tank (it stays for the day, like the koi). Weights set how rare each special is.
+  const COMMONS = ['coral', 'marimo', 'sanddollar'];
+  const SPECIALS = {
+    duck: 10, boat: 10, sharpie: 10, glowG: 10,        // common specials
+    ipod: 6, inhaler: 6, chest: 6, diver: 6,           // uncommon
+    sub: 3, ship: 3, tarot: 3,                         // rare
+    glowR: 1,                                          // the rarest
   };
+  const SPECIAL_TIER = (t) => (SPECIALS[t] >= 10 ? 'Common' : SPECIALS[t] >= 6 ? 'Uncommon' : SPECIALS[t] >= 3 ? 'Rare' : 'Ultra rare');
   const FOUND_NAMES = {
-    conch: 'conch shell', sanddollar: 'sand dollar', cowrie: 'cowrie shell', pebbles: 'river pebbles',
-    duck: 'rubber duck', ipod: 'first-gen iPod', key: 'brass key', bracelet: 'bead bracelet', ticket: 'ticket stub', usb: 'USB stick',
-    floppy: 'floppy disk', boat: 'paper boat', cd: 'efrain.fm CD', diver: 'deep-sea diver', chest: 'treasure chest', mason: 'square and compasses',
+    coral: 'coral', marimo: 'moss ball', sanddollar: 'sand dollar',
+    duck: 'rubber duck', boat: 'paper boat', sharpie: 'Sharpie', glowG: 'green glow stick', ipod: 'first-gen iPod',
+    inhaler: 'inhaler', chest: 'treasure chest', diver: 'deep-sea diver', sub: 'submarine', ship: 'sunken ship',
+    tarot: 'the Magician (tarot)', glowR: 'red glow stick',
   };
   const FLOAT_DRAFT = { duck: 0.35, boat: 0.4 };          // how deep each floater sits
-  const UPRIGHT_LEAN = { floppy: -0.36, mason: -0.1, diver: 0, chest: 0, cd: -0.32 };
-  const ITEM_SCALE = { conch: 1.35, diver: 1.5, chest: 1.5, floppy: 1.35, boat: 1.5, mason: 1.6, cd: 1.45 };
-  const ITEM_HEIGHT = { diver: 8, mason: 6.4, floppy: 4.7, chest: 4.4, conch: 4.5, cd: 4.6 };   // local height, to keep things underwater
+  const UPRIGHT_LEAN = { diver: 0, chest: 0, tarot: -0.3, inhaler: -0.08, coral: 0, marimo: 0, ship: 0, sub: 0, sanddollar: 0.5 };
+  const ITEM_SCALE = { diver: 1.5, chest: 1.5, boat: 1.5, tarot: 1.45, coral: 1.4, marimo: 1.3, sanddollar: 1.6, ship: 1.35, sub: 1.25, sharpie: 1.35, glowG: 1.3, glowR: 1.3, inhaler: 1.3 };
+  const ITEM_HEIGHT = { diver: 8, chest: 4.4, tarot: 5.2, coral: 6.5, marimo: 3.4, ship: 7, sub: 5, inhaler: 3.8 };   // local height, to keep things underwater
+  const FLAT = new Set(['sanddollar', 'sharpie', 'glowG', 'glowR', 'ipod', 'ship', 'chest']);       // low finds: kept out of the grass
+  const ITEM_SINK = { ship: 0.35, tarot: 0.5, sanddollar: 0.1, marimo: -0.1, sub: -0.6, coral: 0.45, glowG: -0.05, glowR: -0.05, sharpie: 0.05 };   // how far it sits into the sand (negative: hovers)
+  const ITEM_ROOM = { ship: 13, sub: 9, chest: 7, coral: 7 };                               // clearance from other finds
 
   // ================================================================ state + persistence
   const today = () => new Date().toDateString();
   const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem('dither.v13') || localStorage.getItem('dither.v12') || localStorage.getItem('dither.v11') || localStorage.getItem('dither.v09') || localStorage.getItem('dither.v08') || localStorage.getItem('dither.v07') || localStorage.getItem('shoal.v06') || localStorage.getItem('shoal.v05') || localStorage.getItem('shoal.v04') || localStorage.getItem('shoal.v03') || 'null'); } catch (e) { return null; } })() || {};
+  // the timer: which session it's on (kind: focus / short / long) and what it's doing (mode: idle / ready / run / pause).
+  // Saves from before v1.4 used modes like 'focus-run' and 'rest-done'; those are moved over here.
+  function normTimer(t) {
+    const fresh = (kind) => ({ mode: 'ready', kind, endsAt: 0, remaining: LEN_MIN[kind] * 60 });
+    if (!t || typeof t.mode !== 'string') return { mode: 'idle', kind: 'focus', endsAt: 0, remaining: LEN_MIN.focus * 60 };
+    if (['idle', 'ready', 'run', 'pause'].includes(t.mode) && LEN_MIN[t.kind]) return t;
+    const [k, m] = t.mode.split('-'), kind = k === 'focus' ? 'focus' : 'short';
+    if (m === 'run' || m === 'pause') return { mode: m, kind, endsAt: t.endsAt || 0, remaining: t.remaining || 0 };
+    if (m === 'done') return Object.assign(fresh(k === 'focus' ? 'short' : 'focus'), t.from ? { from: t.from } : {});
+    return { mode: 'idle', kind: 'focus', endsAt: 0, remaining: LEN_MIN.focus * 60 };
+  }
   const state = {
     seed: saved.seed || '',
     shape: SHAPES[saved.shape] ? saved.shape : 'box',
@@ -163,9 +192,12 @@
     evap: saved.evap ?? 0,
     fish: saved.fishDay === today() ? (saved.fish || []) : [],
     pendingFish: saved.fishDay === today() ? (saved.pendingFish || 0) : 0,   // earned, waiting for the reveal
+    items: saved.fishDay === today() && Array.isArray(saved.items) ? saved.items.filter((i) => i && i.type in SPECIALS) : [],   // specials earned today (one per long rest)
+    pendingItem: saved.fishDay === today() ? (saved.pendingItem || 0) : 0,
     fishDay: today(),
-    timer: saved.timer || { mode: 'idle', endsAt: 0, remaining: FOCUS_MIN * 60 },
-    view: 0, az: 0, zoom: 1, zoomTarget: 1, driftPhase: 0, driftAmp: 30,
+    timer: normTimer(saved.timer),
+    cycle: saved.fishDay === today() ? Math.min(ROUND, saved.cycle || 0) : 0,     // focus sessions finished this round (resets at midnight)
+    view: 0, az: 0, spin: 0, lastProgress: null, zoom: 1, zoomTarget: 1, driftPhase: 0, driftAmp: 30,
     growthPreview: null, skyPreview: null,
   };
   let saveTimer = 0;
@@ -174,7 +206,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         seed: state.seed, shape: state.shape, name: state.name, sound: state.sound,
-        growth: state.growth, evap: state.evap, fish: state.fish, pendingFish: state.pendingFish, fishDay: state.fishDay, timer: state.timer,
+        growth: state.growth, evap: state.evap, fish: state.fish, pendingFish: state.pendingFish, items: state.items, pendingItem: state.pendingItem, fishDay: state.fishDay, timer: state.timer, cycle: state.cycle,
         wordsStyle: state.wordsStyle, baseOn: state.baseOn, brain: state.brain, musicVol: state.musicVol, musicMuted: state.musicMuted,
       }));
     } catch (e) { /* storage blocked: still works, just won't remember */ }
@@ -225,6 +257,17 @@
     root.setProperty(`${prefix}-bg`, useDark ? BTN_DARK : BTN_LIGHT);
     root.setProperty(`${prefix}-ink`, useDark ? BTN_LIGHT : BTN_DARK);
     btnContrast[key] = { fillVsSky: +(useDark ? cd : cl).toFixed(2), textVsFill: +contrast(dark, light).toFixed(2) };
+    // the tonal shade (Pause, the tab track): the words' colour mixed into the sky, as little as still keeps the
+    // fill's colour readable on it (4.5:1 or better)
+    // On a dark sky a touch of the fill's colour lifts it into a visible pill; otherwise it's darkened toward the words' colour.
+    const fill = useDark ? dark : light, other = useDark ? light : dark;
+    let tone = behind.clone().lerp(fill, 0.2);
+    if (contrast(fill, tone) < 4.6 || contrast(tone, behind) < 1.15) {
+      let mix = 0.5; tone = behind.clone().lerp(other, mix);
+      while (contrast(fill, tone) < 4.6 && mix < 0.95) { mix += 0.05; tone = behind.clone().lerp(other, mix); }
+    }
+    root.setProperty(`${prefix}-tone`, `rgb(${Math.round(tone.x * 255)}, ${Math.round(tone.y * 255)}, ${Math.round(tone.z * 255)})`);
+    btnContrast[key].textVsTone = +contrast(fill, tone).toFixed(2);
   }
 
   // ================================================================ tank footprint (shape)
@@ -373,7 +416,7 @@
 
   const SCENE_FRAG = /* glsl */`
     uniform float uTime, uWater, uLight, uCamDist, uGrowth, uGlow, uFlash, uMGlow, uBaseHover, uShade;
-    uniform vec3 uLightDir; uniform vec2 uShadeOff;
+    uniform vec3 uLightDir; uniform vec2 uShadeOff, uSticks; uniform vec4 uStickG, uStickR;
     varying vec3 vW; varying vec3 vN; varying float vMat; varying vec2 vDir; varying float vOrient;
     varying float vPhase; varying float vLum; varying float vViewZ; varying float vBirth;
     ${COMMON}
@@ -417,8 +460,8 @@
         if (m == ${M.leaf}) lum = 0.3 + 0.6 * diff + 0.15 * hash13(floor(vW * 3.0));
       } else if (m == ${M.ipodScreen}) {
         lum = mix(0.3 + 0.5 * diff, 1.0, uFlash);
-      } else if (m == ${M.masonBrass}) {
-        lum = mix(0.22 + 0.6 * diff, 1.0, uMGlow);
+      } else if (m == ${M.coral} || m == ${M.coralTip} || m == ${M.inhaler} || m == ${M.sub}) {
+        lum = 0.5 + 0.55 * diff;                // the bright finds: big dots, so the colour carries underwater
       } else if (m == ${M.glass}) {
         lum = 0.55; lit = false;
       } else if (m == ${M.glow}) {
@@ -447,6 +490,16 @@
       lum += addGlow;          // the base's own light ignores the night dimming
       if (vLum > 0.0) lum = vLum * (0.5 + 0.5 * uLight);
       if (m == ${M.glow}) lum = vLum * uGlow;
+      // glow sticks make their own light: full brightness day or night, with a slow breathing pulse
+      if (m == ${M.stickG} || m == ${M.stickR}) { float k = m == ${M.stickG} ? uSticks.x : uSticks.y; lum = (0.55 + 0.25 * diff + 0.08 * sin(uTime * 1.7 + vW.x)) * min(k, 1.0) + 0.25 * max(k - 1.0, 0.0); }
+      // a glow stick lights what's around it: nearby dots turn its colour, thinning out with distance
+      if (m != ${M.stickG} && m != ${M.stickR} && m != ${M.glow} && m != ${M.glass} && m != ${M.base}) {
+        vec3 dg = vW - uStickG.xyz, dr = vW - uStickR.xyz;
+        float pulse = 0.88 + 0.12 * sin(uTime * 1.7);
+        float gG = uStickG.w * pulse * exp(-dot(dg, dg) / 70.0), gR = uStickR.w * pulse * exp(-dot(dr, dr) / 70.0);
+        float h = hash13(floor(vW * 2.6) + 0.5);
+        float gm = max(gG, gR); if (gm > 0.05 && h < gm * 1.5) { m = gG >= gR ? ${M.haloG} : ${M.haloR}; lum = max(lum * 0.6, 0.3 + 0.6 * min(1.0, gm)); }
+      }
       float oc = 0.0;
       if (vOrient > 0.5) {
         float a = atan(vDir.y, vDir.x); if (a < 0.0) a += 3.14159265;
@@ -737,7 +790,7 @@
       } else {
         float r = rMax * pow(lumD, 0.6) * 1.12;
         if (id == ${M.water}) r *= 0.6;
-        if (id == ${M.glow}) r = rMax * lumD;
+        if (id == ${M.glow} || id == ${M.haloG} || id == ${M.haloR}) r = rMax * lumD;
         m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
       }
       gl_FragColor = vec4(mix(bgc, col, m), 1.0);
@@ -751,7 +804,7 @@
     uTime: { value: 0 }, uWater: { value: TANK.h * 0.95 }, uLight: { value: 1 }, uGrowth: { value: 0.06 }, uGlow: { value: 0 },
     uPointSize: { value: 1 }, uViewPx: { value: new T.Vector2(1, 1) }, uCamDist: { value: 100 },
     uRip: { value: Array.from({ length: 8 }, () => new T.Vector4(0, 0, -99, 0)) },
-    uFlash: { value: 0 }, uMGlow: { value: 0 }, uBaseHover: { value: 0 }, uStatic: { value: 0 },
+    uFlash: { value: 0 }, uMGlow: { value: 0 }, uBaseHover: { value: 0 }, uStatic: { value: 0 }, uSticks: { value: new T.Vector2(1, 1) }, uStickG: { value: new T.Vector4(0, -99, 0, 0) }, uStickR: { value: new T.Vector4(0, -99, 0, 0) },
     uShade: { value: 0 }, uShadeOff: { value: new T.Vector2(0, 6) }, uTrans: { value: new T.Vector3(0, 0, 0) },
     uFlow: { value: new T.Vector3(1, 0.2, 0.12) }, uLightDir: { value: new T.Vector3(-0.3, 1, 0.35) },
     uShape: { value: new T.Vector4(45, 20, 4, 0) }, uShapePh: { value: new T.Vector3() },
@@ -842,6 +895,12 @@
   }
 
   let grid = { cols: 1, rows: 1, cwCss: 6, chCss: 6 };
+  // the digits' height as a share of the font size, measured from the typeface (pixel fonts differ a lot here)
+  function digitCapRatio() {
+    const c = document.createElement('canvas').getContext('2d'); c.font = `100px ${FONT_PIXEL}`;
+    const a = c.measureText('0').actualBoundingBoxAscent;
+    return a > 10 ? a / 100 : 0.73;
+  }
   function layout() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = window.innerWidth, H = window.innerHeight;
@@ -870,14 +929,20 @@
     {
       const aspectV = (cols * cwDev) / (rows * chDev);
       const bandW = Math.round(cols * (aspectV < 0.8 ? 0.92 : aspectV < 1.25 ? 0.72 : 0.5));     // phones get most of the width
-      // sizes in cells; GAP is 24 css px between the digits, the word under them, and any button below that
+      // sizes in cells. The digits sit under the session tabs and round squares (set in CSS: tabs 12px from the top,
+      // 40px tall, squares 10px under them), with 16px of sky between those and the digits, and 16px down to "Start".
       const pxc = chDev / dpr, GAP = 24 / pxc, sxr = chDev / cwDev;
+      const capR = digitCapRatio();                                                 // how tall the typeface's digits are, per unit of size
       const digit = Math.min(rows * 0.145, (bandW / sxr) * 0.94 / 2.8);          // "25:00" fits the band
       const lab = Math.max(digit * 0.34, 15 / pxc);
-      const digitBase = 0.6 + 0.73 * digit, labBase = digitBase + GAP + 0.73 * lab;
-      const bandH = Math.min(rows - 2, Math.ceil(labBase + 0.3 * lab + 1)), bandX = Math.round((cols - bandW) / 2), bandTop = Math.round(rows * (aspectV < 0.8 ? 0.05 : 0.03));
+      const digitBase = 0.6 + capR * digit, labBase = digitBase + GAP + 0.73 * lab;
+      const oyCss = (H - rows * chDev / dpr) / 2, tabsEl = document.getElementById('modeTabs');
+      const tabsTop = (tabsEl && parseFloat(getComputedStyle(tabsEl).top)) || 12;
+      const digitTopPx = tabsTop + 40 + 10 + 8 + 22;
+      const bandTop = Math.max(1, Math.round((digitTopPx - oyCss) / pxc - 0.6));
+      const bandH = Math.min(rows - 2, Math.ceil(digitBase + 1.2)), bandX = Math.round((cols - bandW) / 2);
       const lTop = bandTop + Math.max(0, Math.floor(labBase - lab * 1.05)), lH = Math.min(rows - lTop, Math.ceil(lab * 1.45) + 2);
-      var tl = { digit, lab, digitBase, labBase, actTop: labBase + 0.25 * lab + GAP };
+      var tl = { digit, lab, digitBase, labBase, capR, actTop: digitBase + 16 / pxc };
       const F = clamp(Math.round(cwDev / 3), 2, 4);
       band = { bandH, bandW, bandX, bandTop, lTop, lH, F, ...tl };
       asciiU.uOvRect.value.set(bandX - 1, rows - (bandTop + bandH) - 1, bandX + bandW + 1, rows);      // where the timer's outline can be (cells, from the bottom)
@@ -1249,6 +1314,7 @@
     });
 
     // ---------- carpet: fills in from dense clumps outward (also on emerged ground)
+    terrain.lawn = (x, z) => noise(x * 0.15 + 11, z * 0.22 + 5) >= 0.26 && sandAt(x, z) <= 0.5;     // flat finds avoid it
     for (let i = 0; i < 15000; i++) {
       const x = R(-A, A), z = R(-B * 0.2, B);
       if (!inside(x, z, 0.6)) continue;
@@ -1287,12 +1353,9 @@
       pts.v(p, UP, M.mote, 0, R(0, 100), null, R(0.25, 0.65));
     }
 
-    // ---------- maybe a found object: ~1 in 13 for each common one, ~1 in 70 rare, ~1 in 130 kitsch, ~1 in 570 ultra
+    // ---------- maybe a find of its own: a coral, a moss ball or a sand dollar (about half of all tanks)
     let foundType = null;
-    if (rand() < 0.35) {
-      const r = rand();
-      foundType = pick(FOUND[r < 0.005 ? 'ultra' : r < 0.05 ? 'kitsch' : r < 0.38 ? 'rare' : 'common']);
-    }
+    if (rand() < 0.5) foundType = pick(COMMONS);
     const foundSeed = Math.floor(rand() * 1e9);
 
     // ---------- glass: rim + base outline, verticals at the corners or sides
@@ -1373,7 +1436,9 @@
     world.add(dynPoints); world.add(fishGroup); world.add(itemGroup);
     world.add(makeHaze());
     world.add(propGroup);
+    finds.slice().forEach(removeFind);
     placeFound(foundType, mulberry32(foundSeed));
+    syncItems(true);
     bubbles.length = 0;
     // tank bounds for edge taps
     tankBox.A = A; tankBox.B = B;
@@ -1382,29 +1447,131 @@
 
   // ================================================================ found objects (geometry)
   const itemGeoCache = {};
+  const sph = (r, d = 2) => new T.IcosahedronGeometry(r, d);
+  // a tapered tube from a to c
+  function tube(b, a, c, r0, r1, mat, rs = 8) {
+    const d = c.clone().sub(a), q = new T.Quaternion().setFromUnitVectors(UP, d.clone().normalize());
+    b.mesh(new T.CylinderGeometry(r1, r0, d.length(), rs, 1).applyMatrix4(new T.Matrix4().compose(a.clone().add(c).multiplyScalar(0.5), q, V(1, 1, 1))), mat);
+  }
+  // a mesh whose shading is baked per vertex (for patterns finer than one material per triangle)
+  function baked(b, geo, mat, lumFn) {
+    const g = geo.index ? geo.toNonIndexed() : geo; g.computeVertexNormals();
+    const P = g.attributes.position, N = g.attributes.normal, p = new T.Vector3(), n = new T.Vector3();
+    for (let i = 0; i < P.count; i++) { p.fromBufferAttribute(P, i); n.fromBufferAttribute(N, i); b.v(p.clone(), n.clone(), mat, 0, 0, null, Math.max(0.03, lumFn(p, n))); }
+  }
+  const BAKE_L = V(0.35, 0.85, 0.4).normalize();
   function itemGeometry(type) {
     if (itemGeoCache[type]) return itemGeoCache[type];
     const b = new Builder();
-    const sph = (r, d = 2) => new T.IcosahedronGeometry(r, d);
-    if (type === 'conch') {
-      // a queen conch lying on its side: pointed spire with spiral ridges, knobbed shoulder, flared pink lip
-      const prof = [[0.02, -4.4], [0.3, -3.8], [0.75, -2.8], [1.4, -1.6], [2.0, -0.4], [2.35, 0.6], [2.2, 1.15], [1.5, 1.6], [1.1, 2.1], [0.75, 2.7], [0.45, 3.3], [0.2, 3.9], [0.02, 4.3]]
-        .map(([r, y]) => new T.Vector2(r, y));
-      const lathe = new T.LatheGeometry(prof, 28);
-      const P = lathe.attributes.position, q = new T.Vector3();
-      for (let i = 0; i < P.count; i++) {
-        q.fromBufferAttribute(P, i);
-        const th = Math.atan2(q.z, q.x), k = q.y > 1.2 ? 1 + 0.09 * Math.sin(q.y * 7.0 - th) : 1;
-        P.setXYZ(i, q.x * k, q.y, q.z * k);
+    if (type === 'coral') {
+      // a branching staghorn coral, hot coral pink with pale tips
+      const rnd = mulberry32(11);
+      const grow = (p, dir, len, r, depth) => {
+        const end = p.clone().addScaledVector(dir, len);
+        tube(b, p, end, r, r * 0.8, M.coral);
+        if (depth === 0) { part(b, sph(r * 0.92, 1), M.coralTip, end); return; }
+        part(b, sph(r * 0.8, 1), M.coral, end);
+        const n = depth >= 3 ? 2 : 2 + (rnd() < 0.45 ? 1 : 0);
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * 6.28 + rnd() * 1.4, axis = V(Math.cos(ang), 0, Math.sin(ang));
+          const nd = dir.clone().applyAxisAngle(axis, 0.38 + rnd() * 0.42); nd.y += 0.3; nd.normalize();
+          grow(end, nd, len * (0.7 + rnd() * 0.2), r * 0.76, depth - 1);
+        }
+      };
+      for (let k = 0; k < 5; k++) { const a = k * 1.26; part(b, sph(0.55, 1), M.coral, V(Math.cos(a) * 0.55, 0.35, Math.sin(a) * 0.5)); }
+      for (let k = 0; k < 4; k++) { const a = k * 1.57 + rnd() * 0.7; grow(V(Math.cos(a) * 0.5, 0.45, Math.sin(a) * 0.5), V(Math.cos(a) * 0.55, 1, Math.sin(a) * 0.55).normalize(), 1.5, 0.42, 3); }
+    } else if (type === 'marimo') {
+      // a fuzzy moss ball and a little one beside it
+      const nz = makeNoise(mulberry32(5));
+      const ball = (R, c) => {
+        const g = sph(R, 5), P = g.attributes.position, q = new T.Vector3();
+        for (let i = 0; i < P.count; i++) { q.fromBufferAttribute(P, i); const k = 1 + 0.05 * (nz(q.x * 2.1 + q.z, q.y * 2.1) - 0.5) + 0.035 * Math.sin(q.x * 13.1 + q.y * 7.3 + q.z * 11.7); P.setXYZ(i, c.x + q.x * k, c.y + q.y * k, c.z + q.z * k); }
+        baked(b, g, M.marimo, (p, n) => { const fuzz = 0.5 + 0.5 * Math.sin(p.x * 19.3 + p.y * 23.1 + p.z * 17.7); return (0.2 + 0.72 * Math.max(0, n.dot(BAKE_L))) * (0.72 + 0.28 * fuzz); });
+      };
+      ball(1.75, V(0, 1.6, 0)); ball(0.85, V(2.35, 0.8, 0.7));
+    } else if (type === 'sanddollar') {
+      // a domed disc with the five-petal flower on top and five keyhole slots
+      const R = 2.0, rings = 26, segs = 90, pos = [], idx = [];
+      const topY = (r) => 0.13 + 0.3 * (1 - (r / R) * (r / R));
+      pos.push(0, topY(0), 0);
+      for (let i = 1; i <= rings; i++) for (let j = 0; j < segs; j++) { const r = (i / rings) * R, th = (j / segs) * Math.PI * 2; pos.push(Math.cos(th) * r, topY(r), Math.sin(th) * r); }
+      for (let j = 0; j < segs; j++) idx.push(0, 1 + ((j + 1) % segs), 1 + j);
+      for (let i = 1; i < rings; i++) for (let j = 0; j < segs; j++) {
+        const a = 1 + (i - 1) * segs + j, b2 = 1 + (i - 1) * segs + (j + 1) % segs, c = 1 + i * segs + j, d = 1 + i * segs + (j + 1) % segs;
+        idx.push(a, b2, c, b2, d, c);
       }
-      lathe.computeVertexNormals();
-      const nz = makeNoise(mulberry32(7));
-      part(b, lathe, M.shell, V(0, 2.0, 0), [0, 0, Math.PI / 2], [1, 1, 1], (p) => (nz(p.x * 0.9 + 3, p.y * 0.9 + p.z * 0.5) > 0.62 ? M.cowrie : M.shell));
-      for (let k = 0; k < 7; k++) {
-        const a = -0.9 + (k / 6) * 2.6;
-        part(b, new T.ConeGeometry(0.34, 1.1, 6), M.shell, V(-0.9, 2.0 + 2.4 * Math.cos(a), 2.4 * Math.sin(a)), [a, 0, 0.35]);
-      }
-      part(b, sph(1, 2), M.shellPink, V(0.7, 2.3, 1.95), [-0.5, 0, 0.15], [3.3, 2.2, 0.35]);
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+      baked(b, g, M.sanddollar, (p, n) => {
+        const r = Math.hypot(p.x, p.z), th = Math.atan2(p.z, p.x);
+        let lum = 0.36 + 0.55 * Math.max(0, n.dot(BAKE_L));
+        let best = 9; for (let k = 0; k < 5; k++) { const d = Math.atan2(Math.sin(th - (k * 1.2566 + Math.PI / 2)), Math.cos(th - (k * 1.2566 + Math.PI / 2))); if (Math.abs(d) < Math.abs(best)) best = d; }
+        const u = (r - 0.16 * R) / (0.5 * R);
+        if (u > 0 && u < 1) {
+          const w = 0.34 * Math.sin(Math.PI * u), e = (Math.abs(best) - w) * r;
+          if (Math.abs(e) < 0.07) lum *= 0.3;                      // the petal outline
+          else if (e < 0) lum *= 1.08 - 0.1 * (0.5 + 0.5 * Math.sin(r * 38));   // pore rows inside the petal
+        }
+        if (r < 0.1 * R) lum *= 0.5;
+        const dr = (r - 0.8 * R) / 0.24, da = best * r / 0.085;
+        if (dr * dr + da * da < 1) lum = 0.04;                      // keyhole slots
+        if (r > 0.97 * R) lum *= 0.75;
+        return lum;
+      });
+      const under = new T.CircleGeometry(R, segs).rotateX(Math.PI / 2); baked(b, under, M.sanddollar, () => 0.3);
+      baked(b, new T.CylinderGeometry(R, R, 0.13, segs, 1, true).translate(0, 0.065, 0), M.sanddollar, () => 0.42);
+    } else if (type === 'glowG' || type === 'glowR') {
+      // a snapped glow stick lying in the sand, with its little hanging loop
+      const m = type === 'glowG' ? M.stickG : M.stickR;
+      part(b, new T.CylinderGeometry(0.3, 0.3, 5, 12), m, V(0, 0.32, 0), [0, 0, Math.PI / 2]);
+      part(b, sph(0.3, 2), m, V(-2.5, 0.32, 0)); part(b, sph(0.3, 2), m, V(2.5, 0.32, 0));
+      part(b, new T.CylinderGeometry(0.2, 0.2, 0.3, 8), m, V(2.85, 0.32, 0), [0, 0, Math.PI / 2]);
+      part(b, new T.TorusGeometry(0.42, 0.08, 6, 14), m, V(3.35, 0.32, 0), [Math.PI / 2, 0, 0]);
+    } else if (type === 'ship') {
+      // a little wrecked galleon: open hull, a stern castle, a snapped mast with a torn sail, a hole in the side
+      part(b, new T.SphereGeometry(1, 22, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), M.wood, V(0, 1.7, 0), [0, 0, 0], [4.6, 1.8, 1.55]);
+      part(b, new T.BoxGeometry(8.4, 0.2, 2.8), M.wood, V(0, 1.6, 0));
+      part(b, new T.BoxGeometry(2.3, 1.5, 2.7), M.wood, V(-3.15, 2.35, 0));
+      [-0.75, 0, 0.75].forEach((z) => part(b, new T.BoxGeometry(0.1, 0.5, 0.42), M.glassDark, V(-4.32, 2.4, z)));
+      tube(b, V(4.2, 1.9, 0), V(6.3, 2.9, 0), 0.16, 0.08, M.wood);
+      tube(b, V(0.7, 1.6, 0), V(0.7, 6.3, 0), 0.24, 0.17, M.wood);
+      tube(b, V(0.7, 5.3, -1.7), V(0.7, 5.3, 1.7), 0.1, 0.1, M.wood);
+      tube(b, V(-1.7, 1.6, 0), V(-1.95, 3.6, 0.2), 0.2, 0.16, M.wood);      // the snapped one
+      const sail = new T.PlaneGeometry(3.1, 2.6, 7, 5), S = sail.attributes.position, rs = mulberry32(3);
+      for (let i = 0; i < S.count; i++) { const x = S.getX(i), y = S.getY(i); let yy = y; if (y < -1.2) yy = y + rs() * 1.1; S.setXYZ(i, x, yy, 0.25 * Math.sin((x / 3.1) * Math.PI) * (1 - (y + 1.3) / 2.6)); }
+      part(b, sail, M.paper, V(0.75, 3.95, 0), [0, Math.PI / 2, 0]);
+      part(b, sph(1, 1), M.ink, V(1.4, 1.0, 1.42), [0, 0, 0.2], [0.85, 0.5, 0.22]);
+      [-2.2, 2.2].forEach((x) => tube(b, V(x, 1.75, 1.3), V(x * 0.9, 2.3, 1.35), 0.06, 0.06, M.wood));
+    } else if (type === 'sub') {
+      // a yellow toy submarine: portholes, a conning tower, a periscope and fins (the propeller spins on its own)
+      part(b, new T.CapsuleGeometry(1.15, 3.4, 8, 16), M.sub, V(0, 1.2, 0), [0, 0, Math.PI / 2]);
+      part(b, new T.CylinderGeometry(0.55, 0.62, 1.1, 14), M.sub, V(0.3, 2.45, 0), [0, 0, 0], [1.6, 1, 1]);
+      tube(b, V(0.65, 2.9, 0), V(0.65, 3.9, 0), 0.1, 0.1, M.usbMetal); tube(b, V(0.6, 3.9, 0), V(1.1, 3.9, 0), 0.11, 0.11, M.usbMetal);
+      [-1.2, 0, 1.2].forEach((x) => [-1, 1].forEach((sz) => {
+        part(b, new T.CylinderGeometry(0.32, 0.32, 0.1, 14), M.glassDark, V(x, 1.3, sz * 1.1), [Math.PI / 2, 0, 0]);
+        part(b, new T.TorusGeometry(0.34, 0.07, 6, 16), M.brass, V(x, 1.3, sz * 1.13));
+      }));
+      part(b, new T.BoxGeometry(0.9, 0.08, 2.9), M.sub, V(-2.3, 1.2, 0));
+      part(b, new T.BoxGeometry(0.9, 1.7, 0.08), M.sub, V(-2.3, 1.2, 0));
+    } else if (type === 'subProp') {
+      part(b, new T.CylinderGeometry(0.16, 0.16, 0.5, 8), M.brass, V(0, 0, 0), [0, 0, Math.PI / 2]);
+      for (let k = 0; k < 3; k++) part(b, new T.BoxGeometry(0.08, 0.95, 0.32), M.brass, V(0, 0, 0).add(V(0, Math.cos(k * 2.094) * 0.45, Math.sin(k * 2.094) * 0.45)), [k * 2.094, 0, 0.5]);
+    } else if (type === 'inhaler') {
+      // an asthma inhaler: red L-shaped body standing on its mouthpiece, white cap, metal canister poking out the top
+      part(b, new T.BoxGeometry(1.7, 3.3, 1.15), M.inhaler, V(0, 1.75, 0));
+      part(b, new T.CylinderGeometry(0.85, 0.85, 1.15, 16, 1, false, 0, Math.PI), M.inhaler, V(0, 3.4, 0), [Math.PI / 2, 0, Math.PI / 2], [1, 1, 0.35]);
+      part(b, new T.CylinderGeometry(0.52, 0.52, 0.9, 14), M.usbMetal, V(0, 3.9, 0));
+      part(b, new T.BoxGeometry(1.45, 1.0, 1.4), M.inhaler, V(0, 0.55, 1.15));
+      part(b, new T.BoxGeometry(1.6, 1.12, 0.55), M.paper, V(0, 0.57, 2.05));
+    } else if (type === 'sharpie') {
+      // a black marker lying in the sand: grey label band, cap with a clip (the cap pops off on its own)
+      part(b, new T.CylinderGeometry(0.4, 0.4, 0.7, 14), M.ink, V(-2.15, 0.42, 0), [0, 0, Math.PI / 2]);
+      part(b, sph(0.4, 2), M.ink, V(-2.5, 0.42, 0), [0, 0, 0], [0.5, 1, 1]);
+      part(b, new T.CylinderGeometry(0.41, 0.41, 2.5, 14), M.usbMetal, V(-0.55, 0.42, 0), [0, 0, Math.PI / 2]);
+      part(b, new T.CylinderGeometry(0.4, 0.4, 0.5, 14), M.ink, V(0.95, 0.42, 0), [0, 0, Math.PI / 2]);
+    } else if (type === 'sharpieCap') {
+      part(b, new T.CylinderGeometry(0.47, 0.47, 1.9, 14), M.ink, V(0.95, 0, 0), [0, 0, Math.PI / 2]);
+      part(b, sph(0.47, 2), M.ink, V(1.9, 0, 0), [0, 0, 0], [0.45, 1, 1]);
+      part(b, new T.BoxGeometry(1.5, 0.1, 0.22), M.ink, V(0.85, 0.52, 0));
     } else if (type === 'diver') {
       // the classic bubbling deep-sea diver ornament
       [-0.55, 0.55].forEach((x) => {
@@ -1435,11 +1602,6 @@
       part(b, new T.CylinderGeometry(1.4, 1.4, 4.4, 14, 1, false, 0, Math.PI), M.wood, V(0, 0, 1.4), [0, 0, Math.PI / 2], [0.7, 1, 1]);
       [-1.6, 1.6].forEach((x) => part(b, new T.CylinderGeometry(1.45, 1.45, 0.3, 14, 1, false, 0, Math.PI), M.brass, V(x, 0, 1.4), [0, 0, Math.PI / 2], [0.72, 1, 1]));
       part(b, new T.BoxGeometry(0.6, 0.5, 0.2), M.brass, V(0, 0.15, 2.82));
-    } else if (type === 'floppy') {
-      // a 3.5" floppy disk, leaning back in the sand
-      part(b, new T.BoxGeometry(4.6, 4.6, 0.28), M.floppy, V(0, 2.3, 0));
-      part(b, new T.BoxGeometry(2.6, 1.6, 0.32), M.usbMetal, V(0.25, 3.8, 0));
-      part(b, new T.BoxGeometry(3.6, 2.3, 0.32), M.paper, V(0, 1.35, 0));
     } else if (type === 'boat') {
       // a folded paper boat
       const L = 2.8, l = 1.6, h = 1.3, w = 0.9, top = h + 2.4;
@@ -1447,130 +1609,190 @@
       for (const z of [w, -w]) { const A = V(-l, 0, 0), B2 = V(l, 0, 0), C = V(L, h, z), D = V(-L, h, z); tri3(A, B2, C); tri3(A, C, D); }
       tri3(V(-l, 0, 0), V(-L, h, w), V(-L, h, -w)); tri3(V(l, 0, 0), V(L, h, -w), V(L, h, w));
       tri3(V(-1.5, h, 0.05), V(1.5, h, 0.05), V(0, top, 0.05)); tri3(V(-1.5, h, -0.05), V(0, top, -0.05), V(1.5, h, -0.05));
-    } else if (type === 'mason') {
-      // square and compasses with a G, in brass, standing in the sand
-      const bar = (x0, y0, x1, y1, wd) => { const dx = x1 - x0, dy = y1 - y0; part(b, new T.BoxGeometry(Math.hypot(dx, dy), wd, 0.3), M.masonBrass, V((x0 + x1) / 2, (y0 + y1) / 2, 0), [0, 0, Math.atan2(dy, dx)]); };
-      bar(0, 5.6, -2.9, 0.6, 0.55); bar(0, 5.6, 2.9, 0.6, 0.55);
-      part(b, new T.CylinderGeometry(0.55, 0.55, 0.34, 18), M.masonBrass, V(0, 5.7, 0), [Math.PI / 2, 0, 0]);
-      bar(0, 0.9, -3.1, 4.0, 0.7); bar(0, 0.9, 3.1, 4.0, 0.7);
-      part(b, new T.TorusGeometry(0.85, 0.28, 6, 22, Math.PI * 1.6), M.masonBrass, V(0, 3.05, 0.05), [0, 0, Math.PI * 0.2]);
-      bar(0.2, 2.95, 0.95, 2.95, 0.4);
     } else if (type === 'duck') {
       part(b, sph(1, 2), M.duck, V(0, 1.1, 0), [0, 0, 0], [2.1, 1.3, 1.5]);
       part(b, sph(1, 2), M.duck, V(1.3, 2.6, 0), [0, 0, 0], [0.95, 0.95, 0.95]);
       part(b, sph(1, 1), M.duck, V(-1.9, 1.9, 0), [0, 0, 0.6], [0.6, 0.35, 0.6]);
       part(b, sph(1, 1), M.beak, V(2.25, 2.45, 0), [0, 0, 0], [0.55, 0.22, 0.45]);
+      [-1, 1].forEach((sz) => part(b, sph(0.16, 1), M.ink, V(1.95, 2.85, sz * 0.5)));
     } else if (type === 'ipod') {
       part(b, new T.BoxGeometry(3.8, 0.9, 6.1), M.ipod, V(0, 0.45, 0));
       part(b, new T.BoxGeometry(2.8, 0.1, 2.0), M.ipodScreen, V(0, 0.92, -1.6));
       part(b, new T.CylinderGeometry(1.3, 1.3, 0.12, 20), M.ipodWheel, V(0, 0.93, 1.15));
       part(b, new T.CylinderGeometry(0.45, 0.45, 0.16, 14), M.ipod, V(0, 0.96, 1.15));
-    } else if (type === 'sanddollar') {
-      part(b, new T.CylinderGeometry(1.7, 1.8, 0.35, 22), M.sanddollar, V(0, 0.18, 0));
-    } else if (type === 'cowrie') {
-      part(b, sph(1, 2), M.cowrie, V(0, 0.45, 0), [0, 0, 0], [1.1, 0.55, 0.75]);
-    } else if (type === 'pebbles') {
-      part(b, sph(0.7, 1), M.pebble, V(-0.9, 0.35, 0.2), [0, 0, 0], [1.2, 0.6, 1]);
-      part(b, sph(0.55, 1), M.pebble, V(0.5, 0.3, -0.4), [0, 0, 0], [1.1, 0.7, 1]);
-      part(b, sph(0.5, 1), M.pebble, V(0.4, 0.28, 0.8), [0, 0, 0], [1, 0.6, 1.2]);
-    } else if (type === 'key') {
-      part(b, new T.TorusGeometry(0.75, 0.2, 6, 16), M.brass, V(-1.6, 0.2, 0), [Math.PI / 2, 0, 0]);
-      part(b, new T.BoxGeometry(2.6, 0.22, 0.3), M.brass, V(0.35, 0.15, 0));
-      part(b, new T.BoxGeometry(0.25, 0.22, 0.6), M.brass, V(1.2, 0.15, 0.35));
-      part(b, new T.BoxGeometry(0.25, 0.22, 0.45), M.brass, V(1.55, 0.15, 0.28));
-    } else if (type === 'bracelet') {
-      for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; part(b, sph(0.36, 1), i % 2 ? M.beadA : M.beadB, V(Math.cos(a) * 1.7, 0.36, Math.sin(a) * 1.7)); }
-    } else if (type === 'ticket') {
-      part(b, new T.BoxGeometry(3.4, 0.08, 1.7), M.ticket, V(0, 0.05, 0), [0.05, 0, 0.04]);
-    } else if (type === 'usb') {
-      part(b, new T.BoxGeometry(2.6, 0.55, 1.0), M.usb, V(0, 0.28, 0));
-      part(b, new T.BoxGeometry(1.0, 0.4, 0.8), M.usbMetal, V(1.75, 0.25, 0));
     }
     return (itemGeoCache[type] = b.build());
   }
 
   const itemGroup = new T.Group();
-  let found = null;
+  let finds = [];          // the find in this tank (if any) plus the specials you've earned today
   const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
   const easeOutBack = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
   const lerp = (a, b, u) => a + (b - a) * u;
 
-  // ---- the efrain.fm CD: a disc with a printed face and a rainbow data side
-  const CD_VERT = /* glsl */`
+  // ---- the Magician: a Tarot de Marseille card, painted on a canvas and read back as halftone materials
+  const CARD_VERT = /* glsl */`
     varying vec2 vUv; varying vec3 vW; varying vec3 vN;
     void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }
   `;
-  const CD_FRAG = /* glsl */`
-    uniform sampler2D uLabel; uniform float uTime, uWater, uLight; uniform vec3 uLightDir;
+  const CARD_FRAG = /* glsl */`
+    uniform sampler2D uArt; uniform float uTime, uWater, uLight, uMGlow; uniform vec3 uLightDir;
     varying vec2 vUv; varying vec3 vW; varying vec3 vN;
     ${COMMON}
     ${TRANS_GLSL}
     void main() {
       ${TRANS_HAZE}
-      vec2 c = vUv - 0.5; float r = length(c) * 2.0;
-      if (r > 1.0 || r < 0.15) discard;
       vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
       float diff = max(dot(N, normalize(uLightDir)), 0.0);
-      float m; float lum = 0.5 + 0.45 * diff;
+      float m = ${M.cardCream}.0; float lum = 0.5 + 0.35 * diff;
       if (gl_FrontFacing) {
-        float a = texture2D(uLabel, vUv).a;
-        if (a > 0.45) { m = ${M.cdInk}.0; lum = 0.6; }
-        else if (r > 0.93) m = ${M.cdA}.0;
-        else if (r < 0.3) m = ${M.cdB}.0;
-        else m = ${M.cdFace}.0;
+        vec3 c = texture2D(uArt, vUv).rgb;
+        // nearest of the six paint colours
+        float best = 9.0;
+        vec3 P[6]; P[0] = vec3(0.95, 0.89, 0.75); P[1] = vec3(0.1, 0.1, 0.13); P[2] = vec3(0.89, 0.28, 0.23); P[3] = vec3(0.23, 0.54, 0.85); P[4] = vec3(0.96, 0.78, 0.21); P[5] = vec3(0.96, 0.75, 0.64);
+        float ids[6]; ids[0] = ${M.cardCream}.0; ids[1] = ${M.cardInk}.0; ids[2] = ${M.cardRed}.0; ids[3] = ${M.cardBlue}.0; ids[4] = ${M.cardYellow}.0; ids[5] = ${M.cardFlesh}.0;
+        for (int i = 0; i < 6; i++) { float d = distance(c, P[i]); if (d < best) { best = d; m = ids[i]; } }
+        lum = m == ${M.cardInk}.0 ? 0.62 : 0.56 + 0.3 * diff;
+        lum = mix(lum, 1.0, uMGlow * 0.45);
       } else {
-        float h = fract(atan(c.y, c.x) / 6.2832 * 2.0 + r * 0.8 + dot(N, vec3(0.4, 0.3, 0.6)) * 0.5);
-        m = h < 0.33 ? ${M.cdA}.0 : h < 0.66 ? ${M.cdB}.0 : ${M.cdC}.0;
-        lum += 0.12;
+        // the back: blue with a cream lattice
+        vec2 g = abs(fract(vec2(vUv.x * 6.0 + vUv.y * 3.6, vUv.x * 6.0 - vUv.y * 3.6)) - 0.5);
+        m = min(g.x, g.y) < 0.09 ? ${M.cardCream}.0 : ${M.cardBack}.0;
+        if (vUv.x < 0.06 || vUv.x > 0.94 || vUv.y < 0.04 || vUv.y > 0.96) m = ${M.cardCream}.0;
       }
       bool under = vW.y < uWater;
       float depthN = clamp((uWater - vW.y) / max(uWater, 1.0), 0.0, 1.0);
       if (under) lum *= 1.0 - depthN * 0.15;
-      lum *= uLight;
+      lum *= 0.55 + 0.45 * uLight;
       gl_FragColor = vec4(clamp(lum, 0.0, 1.0), m / 63.0, under ? 0.1 + 0.9 * depthN : 0.0, 0.0);
     }
   `;
-  const labelCanvas = document.createElement('canvas'); labelCanvas.width = labelCanvas.height = 512;
-  const labelTex = new T.CanvasTexture(labelCanvas);
-  function drawCdLabel() {
-    const c = labelCanvas.getContext('2d');
-    c.clearRect(0, 0, 512, 512); c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.font = `800 76px ${FONT_UI}`; c.fillText('efrain.fm', 256, 170);
-    labelTex.needsUpdate = true;
+  const artCanvas = document.createElement('canvas'); artCanvas.width = 120; artCanvas.height = 204;
+  const artTex = new T.CanvasTexture(artCanvas); artTex.magFilter = T.NearestFilter; artTex.minFilter = T.NearestFilter;
+  function drawCard() {
+    const c = artCanvas.getContext('2d'), W = 120, H = 204;
+    const cream = '#f2e3bf', ink = '#1a1a21', red = '#e3473a', blue = '#3a8ad8', yel = '#f5c736', flesh = '#f5bfa3';
+    const rect = (x, y, w, h, f) => { c.fillStyle = f; c.fillRect(x, y, w, h); };
+    const poly = (pts, f) => { c.fillStyle = f; c.beginPath(); pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fill(); c.strokeStyle = ink; c.lineWidth = 2; c.stroke(); };
+    const ell = (x, y, rx, ry, f) => { c.fillStyle = f; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, 6.2832); c.fill(); c.strokeStyle = ink; c.lineWidth = 2; c.stroke(); };
+    rect(0, 0, W, H, ink); rect(4, 4, W - 8, H - 8, cream);
+    // number cartouche and name band
+    rect(4, 4, W - 8, 20, cream); rect(4, 24, W - 8, 3, ink); rect(4, H - 30, W - 8, 3, ink);
+    c.fillStyle = ink; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = `bold 18px Georgia, serif`; c.fillText('I', W / 2, 15);
+    c.font = `bold 12px Georgia, serif`; c.fillText('LE BATELEUR', W / 2, H - 16);
+    // ground with a few sprigs
+    rect(4, H - 56, W - 8, 26, yel); rect(4, H - 56, W - 8, 2, ink);
+    poly([[14, H - 32], [18, H - 46], [22, H - 32]], blue); poly([[96, H - 32], [101, H - 48], [106, H - 32]], blue);
+    // legs: one red, one blue, yellow shoes
+    rect(46, 128, 10, 22, red); rect(64, 128, 10, 22, blue); c.strokeStyle = ink; c.lineWidth = 2; c.strokeRect(46, 128, 10, 22); c.strokeRect(64, 128, 10, 22);
+    ell(48, 152, 9, 4, yel); ell(73, 152, 9, 4, yel);
+    // tunic, split down the middle, with a yellow belt
+    poly([[38, 74], [60, 70], [60, 128], [34, 128]], blue); poly([[60, 70], [82, 74], [86, 128], [60, 128]], red);
+    rect(36, 100, 50, 6, yel); c.strokeRect(36, 100, 50, 6);
+    // arms: the left raises the wand, the right holds a coin by the table
+    poly([[38, 76], [26, 66], [22, 58], [28, 56], [34, 64], [44, 72]], red); ell(25, 56, 5, 5, flesh);
+    rect(23, 32, 4, 24, yel); c.strokeRect(23, 32, 4, 24);
+    poly([[82, 76], [94, 92], [90, 98], [78, 84]], blue); ell(93, 97, 5, 5, flesh); ell(96, 104, 5, 5, yel);
+    // head, yellow hair, the big hat (a lazy eight on its side)
+    ell(60, 60, 10, 12, flesh); poly([[48, 56], [50, 70], [46, 72]], yel); poly([[72, 56], [70, 70], [74, 72]], yel);
+    ell(43, 44, 20, 8, red); ell(77, 44, 20, 8, red); ell(60, 42, 12, 9, yel); rect(36, 40, 48, 2, ink);
+    c.fillStyle = ink; c.fillRect(55, 58, 3, 2); c.fillRect(63, 58, 3, 2); c.fillRect(57, 66, 6, 2);
+    // the table with his cups and dice
+    rect(18, 108, 84, 10, red); c.strokeRect(18, 108, 84, 10); rect(18, 104, 84, 5, yel); c.strokeRect(18, 104, 84, 5);
+    rect(22, 118, 5, 34, red); rect(93, 118, 5, 34, blue); c.strokeRect(22, 118, 5, 34); c.strokeRect(93, 118, 5, 34);
+    ell(30, 98, 6, 5, blue); ell(46, 99, 4, 4, yel); rect(70, 94, 8, 8, red); c.strokeRect(70, 94, 8, 8); ell(84, 99, 5, 4, blue);
+    artTex.needsUpdate = true;
   }
-  const cdMat = new T.ShaderMaterial({
-    uniforms: { uLabel: { value: labelTex }, uTrans: U.uTrans, uTime: U.uTime, uWater: U.uWater, uLight: U.uLight, uLightDir: U.uLightDir, uRip: U.uRip, uShape: U.uShape, uShapePh: U.uShapePh },
-    vertexShader: CD_VERT, fragmentShader: CD_FRAG, side: T.DoubleSide,
+  drawCard();
+  const cardMat = new T.ShaderMaterial({
+    uniforms: { uArt: { value: artTex }, uTrans: U.uTrans, uTime: U.uTime, uWater: U.uWater, uLight: U.uLight, uLightDir: U.uLightDir, uMGlow: U.uMGlow, uRip: U.uRip, uShape: U.uShape, uShapePh: U.uShapePh },
+    vertexShader: CARD_VERT, fragmentShader: CARD_FRAG, side: T.DoubleSide,
   });
 
-  function placeFound(type, rnd = Math.random) {
-    if (found) { itemGroup.remove(found.root); found = null; }
-    if (terrain) terrain.item = type || null;
-    updateFindLabel();
-    if (!type || !terrain) return;
+  // put a find in the tank. common: the tank's own find (one at most); otherwise a special you earned
+  function addFind(type, rnd = Math.random, opts = {}) {
+    if (!type || !terrain || !(type in FOUND_NAMES)) return null;
     const root = new T.Group(), sc = ITEM_SCALE[type] || 1.5;
-    let lid = null;
-    if (type === 'cd') { const disc = new T.Mesh(new T.CircleGeometry(2.4, 48), cdMat); disc.position.y = 2.4 * 0.78; root.add(disc); }
+    let lid = null, cap = null, prop = null;
+    if (type === 'tarot') { const card = new T.Mesh(new T.PlaneGeometry(3.2, 5.4), cardMat); card.position.y = 2.7; root.add(card); }
     else root.add(new T.Mesh(itemGeometry(type), sceneMat));
     if (type === 'chest') { lid = new T.Group(); lid.position.set(0, 2.2, -1.4); lid.rotation.x = -0.6; lid.add(new T.Mesh(itemGeometry('chestLid'), sceneMat)); root.add(lid); }
+    if (type === 'sharpie') { cap = new T.Group(); cap.position.set(1.2, 0.42, 0); cap.add(new T.Mesh(itemGeometry('sharpieCap'), sceneMat)); root.add(cap); }
+    if (type === 'sub') { prop = new T.Group(); prop.position.set(-2.95, 1.2, 0); prop.add(new T.Mesh(itemGeometry('subProp'), sceneMat)); root.add(prop); }
     root.traverse((o) => { o.frustumCulled = false; });
     root.rotation.order = 'YXZ';
     root.scale.setScalar(sc);
-    const floats = type in FLOAT_DRAFT, upright = type in UPRIGHT_LEAN;
+    const floats = type in FLOAT_DRAFT, upright = type in UPRIGHT_LEAN, room = (ITEM_ROOM[type] || 6) * sc / 1.4;
     let x = 0, z = shape.b * 0.3;
-    for (let i = 0; i < 60; i++) {
-      const cx = (rnd() - 0.5) * 2 * shape.a * 0.62, cz = rnd() * shape.b * 0.55;
+    for (let i = 0; i < 80; i++) {
+      const cx = (rnd() - 0.5) * 2 * shape.a * 0.62, cz = (rnd() - 0.3) * shape.b * 0.75;
       if (!inside(cx, cz, 6) || terrain.inRock(cx, cz, 2.2)) continue;
       if (!floats && terrain.height(cx, cz) > U.uWater.value - 1.5 - (ITEM_HEIGHT[type] || 2) * sc) continue;
+      if (FLAT.has(type) && i < 60 && terrain.lawn && terrain.lawn(cx, cz)) continue;
+      if (finds.some((f) => Math.hypot(f.x - cx, f.z - cz) < room + (ITEM_ROOM[f.type] || 6) * f.sc / 1.4 * 0.6)) continue;
       x = cx; z = cz; break;
     }
     const ry = upright ? (rnd() - 0.5) * 0.6 : rnd() * 6.28;
-    root.rotation.set(upright ? UPRIGHT_LEAN[type] : 0, ry, 0);
-    const sink = type === 'mason' || type === 'floppy' ? 0.55 : type === 'cd' ? 0.5 : 0.15;
+    root.rotation.set(upright ? UPRIGHT_LEAN[type] : 0, ry, type === 'ship' ? 0.3 : 0);
+    const sink = ITEM_SINK[type] ?? 0.15;
     root.position.set(x, floats ? U.uWater.value - FLOAT_DRAFT[type] : terrain.height(x, z) - sink, z);
     itemGroup.add(root);
-    found = { type, root, lid, x, z, floats, ry, sc, vx: 0, vz: 0, bob: rnd() * 6, next: 1 + rnd() * 2, anim: null,
-              rest: { pos: root.position.clone(), rot: root.rotation.clone() } };
+    const o = { type, root, lid, cap, prop, x, z, floats, ry, sc, vx: 0, vz: 0, bob: rnd() * 6, next: 1 + rnd() * 2, anim: null, drop: null, burst: 0,
+                common: !!opts.common, rest: { pos: root.position.clone(), rot: root.rotation.clone() } };
+    finds.push(o);
+    return o;
+  }
+  function removeFind(o) { itemGroup.remove(o.root); finds = finds.filter((f) => f !== o); }
+  // the tank's own find (the admin picker uses this too)
+  function placeFound(type, rnd = Math.random) {
+    finds.filter((f) => f.common).forEach(removeFind);
+    if (terrain) terrain.item = type || null;
+    updateFindLabel();
+    addFind(type, rnd, { common: true });
+  }
+  // the specials earned today, minus any still waiting for their drop
+  function syncItems(rebuild) {
+    if (rebuild) finds.filter((f) => !f.common).forEach(removeFind);
+    const shown = state.items.slice(0, Math.max(0, state.items.length - (state.pendingItem || 0)));
+    finds.filter((f) => !f.common && !shown.some((i) => f.item && i.seed === f.item.seed)).forEach(removeFind);
+    for (const it of shown) if (!finds.some((f) => f.item && f.item.seed === it.seed)) { const o = addFind(it.type, mulberry32(it.seed)); if (o) o.item = it; }
+  }
+  // a new special falls in from the sky, splashes, and sinks (or bobs, if it floats) into place
+  function revealItem(ride = true) {
+    if (!(state.pendingItem > 0)) return;
+    state.pendingItem -= 1; save();
+    const it = state.items[state.items.length - 1 - state.pendingItem];
+    const o = addFind(it.type, mulberry32(it.seed)); if (!o) return;
+    o.item = it;
+    camera.updateMatrixWorld();
+    let y = U.uWater.value + 8; for (; y < 600; y += 2) if (toScreen(V(o.x, y, o.z))[1] < -60) break;
+    o.drop = { t: 0, y, vy: 0, g: 2 * (y - U.uWater.value) / (2.3 * 2.3), wet: false, tumble: V((Math.random() - 0.5) * 2, 1.5 * (Math.random() < 0.5 ? -1 : 1), (Math.random() - 0.5) * 2), rot: V(Math.random(), Math.random() * 6, Math.random()) };
+    o.root.position.y = y;
+    if (ride) startFollow(o, true);
+    $('live').textContent = `A ${FOUND_NAMES[it.type]} fell into the tank. ${SPECIAL_TIER(it.type)} find.`;
+  }
+  function newItem() {
+    const have = new Set(state.items.map((i) => i.type));
+    let pool = Object.keys(SPECIALS).filter((t) => !have.has(t)); if (!pool.length) pool = Object.keys(SPECIALS);
+    let r = Math.random() * pool.reduce((s, t) => s + SPECIALS[t], 0), type = pool[0];
+    for (const t of pool) { r -= SPECIALS[t]; if (r <= 0) { type = t; break; } }
+    return { type, seed: Math.floor(Math.random() * 1e9) };
+  }
+
+  // little sounds for the finds (only after a click, and only with sound on)
+  function sfx(kind) {
+    if (!state.sound) return;
+    const ctx = audio(); if (!ctx) return;
+    const t0 = ctx.currentTime + 0.01, out = ctx.createGain(); out.connect(ctx.destination);
+    const tone = (type, f0, f1, at, dur, vol) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t0 + at); o.frequency.exponentialRampToValueAtTime(f1, t0 + at + dur); g.gain.setValueAtTime(0.0001, t0 + at); g.gain.exponentialRampToValueAtTime(vol, t0 + at + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur); o.connect(g).connect(out); o.start(t0 + at); o.stop(t0 + at + dur + 0.05); };
+    const noise = (at, dur, freq, vol) => { const n = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate), d = n.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length); const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(); s.buffer = n; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 0.8; g.gain.value = vol; s.connect(f).connect(g).connect(out); s.start(t0 + at); };
+    if (kind === 'squeak') { tone('triangle', 1100, 1700, 0, 0.12, 0.07); tone('triangle', 1500, 900, 0.13, 0.16, 0.06); }
+    else if (kind === 'pop') { tone('sine', 700, 160, 0, 0.09, 0.14); noise(0, 0.03, 3000, 0.08); }
+    else if (kind === 'puff') noise(0, 0.38, 1400, 0.22);
+    else if (kind === 'chime') [0, 0.09, 0.18].forEach((at, i) => tone('sine', [988, 1319, 1568][i], [988, 1319, 1568][i] * 0.998, at, 0.9, 0.05));
+    else if (kind === 'clunk') { tone('sine', 180, 70, 0, 0.25, 0.16); noise(0, 0.08, 500, 0.1); }
+    else if (kind === 'blip') tone('sine', 520, 780, 0, 0.12, 0.06);
   }
 
   // lift an item, turn it toward the viewer, hold, then put it back exactly where it was
@@ -1586,37 +1808,73 @@
     o.root.rotation.set(lerp(rr.x, tiltX, u), rr.y + dy * u, 0);
     return a.t < rise ? 0 : a.t < rise + hold ? 1 : 2;
   }
-  // the CD rises out of the water, turns to face you so you can read it, then sinks back
-  function presentCd(o, a, t, water) {
-    const T1 = 1.3, T2 = T1 + 3.8, T3 = T2 + 1.6, big = 4.4;
-    const az = T.MathUtils.degToRad(state.az), d = shape.b + 9;
-    const up = V(Math.sin(az) * d, TANK.h * 0.55, Math.cos(az) * d);
+  // the card rises, grows and turns to face you so you can see the Magician, glowing gold, then settles back
+  function presentCard(o, a, t, water) {
+    const T1 = 1.2, T2 = T1 + 3.6, T3 = T2 + 1.4, big = 2.9;
+    const az = T.MathUtils.degToRad(state.az), d = shape.b * 0.4;
+    const up = V(o.rest.pos.x * 0.4 + Math.sin(az) * d, water - 5.4 * big - 0.8, o.rest.pos.z * 0.4 + Math.cos(az) * d);
+    up.y = Math.max(up.y, terrain.height(up.x, up.z) + 1);
     const rp = o.rest.pos, rr = o.rest.rot;
-    let pos, sc, rx, ry;
-    if (a.t < T1) {
-      const u = ease(a.t / T1);
-      pos = rp.clone().lerp(up, u); pos.y += Math.sin(u * Math.PI) * 4;
-      sc = lerp(o.sc, big, u); rx = lerp(rr.x, 0, u); ry = lerp(rr.y, az, u) + (1 - u) * Math.PI * 2;
-      if (!a.out && pos.y > water) { a.out = true; addRipple(pos.x, pos.z, 1.0, t); splash(pos.x, water, pos.z, 16); }
-    } else if (a.t < T2) {
-      pos = up.clone(); pos.y += Math.sin((a.t - T1) * 1.6) * 0.4;
-      sc = big; rx = 0; ry = az + Math.sin((a.t - T1) * 1.2) * 0.1;
-      if (Math.random() < 0.3) sparkle(pos.x, pos.y + 2.4 * big * 0.78, pos.z, 1, 2.4 * big);
-    } else if (a.t < T3) {
-      const u = ease((a.t - T2) / (T3 - T2));
-      pos = up.clone().lerp(rp, u); pos.y += Math.sin(u * Math.PI) * 3;
-      sc = lerp(big, o.sc, u); rx = lerp(0, rr.x, u); ry = lerp(az, rr.y, u) - u * Math.PI * 2;
-      if (!a.inn && pos.y < water) { a.inn = true; addRipple(pos.x, pos.z, 1.2, t); splash(pos.x, water, pos.z, 18); }
-    } else { pos = rp.clone(); sc = o.sc; rx = rr.x; ry = rr.y; o.anim = null; }
+    let pos, sc, rx, ry, glow;
+    if (a.t < T1) { const u = ease(a.t / T1); pos = rp.clone().lerp(up, u); sc = lerp(o.sc, big, u); rx = lerp(rr.x, 0, u); ry = lerp(rr.y, az, u) + (1 - u) * Math.PI * 2; glow = u; }
+    else if (a.t < T2) { pos = up.clone(); pos.y += Math.sin((a.t - T1) * 1.6) * 0.35; sc = big; rx = 0; ry = az + Math.sin((a.t - T1) * 1.2) * 0.08; glow = 1; if (Math.random() < 0.5) { const an = Math.random() * 6.28, r = 3.2 * big * 0.55; sparkle(pos.x + Math.cos(an) * r * 0.7, pos.y + 2.7 * big + Math.sin(an) * r, pos.z, 1, 0.5, M.cardYellow); } }
+    else if (a.t < T3) { const u = ease((a.t - T2) / (T3 - T2)); pos = up.clone().lerp(rp, u); sc = lerp(big, o.sc, u); rx = lerp(0, rr.x, u); ry = lerp(az, rr.y, u) - u * Math.PI * 2; glow = 1 - u; }
+    else { pos = rp.clone(); sc = o.sc; rx = rr.x; ry = rr.y; glow = 0; o.anim = null; }
+    U.uMGlow.value = Math.max(U.uMGlow.value, glow);
     o.root.position.copy(pos); o.root.scale.setScalar(sc); o.root.rotation.set(rx, ry, 0);
   }
+  const sandPuff = (x, y, z, n = 14) => { for (let k = 0; k < n; k++) sparkle(x + (Math.random() - 0.5) * 3, y + Math.random() * 0.8, z + (Math.random() - 0.5) * 2, 1, 0.6, M.sand); };
+  const bubbleBurst = (p, n, spread = 1, big = 1) => { for (let k = 0; k < n; k++) bubbles.push({ x: p.x + (Math.random() - 0.5) * spread, z: p.z + (Math.random() - 0.5) * spread, y: p.y - Math.random() * spread, vy: 1.4 + Math.random() * 2, size: (0.25 + Math.random() * 0.45) * big, ph: Math.random() * 6 }); };
 
-  // floaters ride the real water level and drift; the diver and chest breathe bubbles; everything reacts to a click
+  // the drop-in for a new special
+  function stepDrop(o, dt, t, water) {
+    const D = o.drop; D.t += dt;
+    const rp = o.rest.pos, rr = o.rest.rot, floor = o.floats ? water - FLOAT_DRAFT[o.type] : rp.y;
+    if (!D.wet) {
+      D.vy -= D.g * dt; D.y += D.vy * dt; D.rot.addScaledVector(D.tumble, dt);
+      if (Math.random() < 0.5) sparkle(o.x, D.y + 2 * o.sc, o.z, 1, 1.2);
+      if (D.y <= water) {
+        D.wet = true; D.vy *= o.floats ? 0 : 0.28;
+        addRipple(o.x, o.z, 1.6, t); addRipple(o.x, o.z, 0.8, t + 0.3); splash(o.x, water, o.z, 50, 1.0);
+        bubbleBurst(V(o.x, water - 1, o.z), 22, 2.5);
+        if (o.floats) D.y = floor;
+      }
+    } else if (!o.floats) {
+      D.vy += (-4.5 - D.vy) * (1 - Math.exp(-dt * 1.6)); D.y += D.vy * dt;          // sinks, rocking like a falling leaf
+      if (Math.random() < 0.25) bubbles.push({ x: o.x, z: o.z, y: D.y + 1, vy: 1.2, size: 0.3, ph: Math.random() * 6 });
+    }
+    const settle = D.wet ? 1 - Math.exp(-dt * 2.2) : 0;
+    D.rot.x += (0 - D.rot.x) * settle; D.rot.z += (0 - D.rot.z) * settle; D.tumble.multiplyScalar(D.wet ? Math.exp(-dt * 2) : 1);
+    const sway = D.wet && !o.floats ? Math.sin(D.t * 3.2) * 0.25 * Math.exp(-D.t * 0.4) : 0;
+    o.root.position.set(o.x + sway * 2, Math.max(D.y, floor), o.z);
+    o.root.rotation.set(rr.x + D.rot.x + sway * 0.4, rr.y + D.rot.y, rr.z + D.rot.z);
+    if (D.wet && (o.floats || D.y <= floor)) {
+      o.drop = null; o.root.position.copy(rp); o.root.rotation.copy(rr);
+      if (o.floats) o.anim = { t: 0 };
+      else { sandPuff(o.x, rp.y + 0.3, o.z, 20); shake = Math.max(shake, 0.25); sfx('clunk'); }
+      if (o.type === 'glowG' || o.type === 'glowR') o.burst = 1;
+    }
+  }
+
+  // every find has a little life of its own and does something when clicked
   function updateFound(dt, t) {
     U.uFlash.value *= Math.exp(-dt * 3);
-    U.uMGlow.value = Math.max(0, U.uMGlow.value - dt * 0.4);
-    if (!found) return;
-    const o = found, water = U.uWater.value, a = o.anim;
+    U.uMGlow.value = Math.max(0, U.uMGlow.value - dt * 0.6);
+    let g = 0, r = 0; U.uStickG.value.w = 0; U.uStickR.value.w = 0;
+    for (const o of finds) {
+      o.burst = Math.max(0, o.burst - dt * 0.5);
+      updateFind(o, dt, t);
+      if (o.type !== 'glowG' && o.type !== 'glowR') continue;
+      const lit = o.drop ? 0.6 : 1 + o.burst * 0.9, u = o.type === 'glowG' ? U.uStickG.value : U.uStickR.value, c = o.root.localToWorld(V(0, 0.4, 0));
+      u.set(c.x, c.y, c.z, lit * 0.85);
+      if (o.type === 'glowG') g = Math.max(g, lit); else r = Math.max(r, lit);
+    }
+    U.uSticks.value.set(g, r);
+  }
+  function updateFind(o, dt, t) {
+    const water = U.uWater.value;
+    if (o.drop) { stepDrop(o, dt, t, water); return; }
+    const a = o.anim;
     if (a) a.t += dt;
     if (o.floats) {
       const f = U.uFlow.value;
@@ -1636,27 +1894,30 @@
       o.root.rotation.set(Math.sin(t * 0.7 + o.bob) * 0.04, o.ry + Math.sin(t * 0.04 + o.bob) * 0.9 + spin, Math.sin(t * 0.9 + o.bob) * 0.05 + (a ? Math.sin(a.t * 9) * 0.1 : 0));
       return;
     }
+    const k = o.type, rp = o.rest.pos, rr = o.rest.rot;
+    // idle life
     o.next -= dt;
-    if (o.type === 'diver' && o.next <= 0) {
+    if (k === 'diver' && o.next <= 0) {
       const p = o.root.localToWorld(V(0, 7.9, 0));
       bubbles.push({ x: p.x, z: p.z, y: p.y, vy: 1.6, size: 0.35, ph: Math.random() * 6 });
       if (Math.random() < 0.35) bubbles.push({ x: p.x + 0.2, z: p.z, y: p.y - 0.4, vy: 1.6, size: 0.2, ph: Math.random() * 6 });
       o.next = 0.5 + Math.random() * 0.45;
     }
-    if (o.type === 'chest' && o.next <= 0 && !a) {
-      const p = o.root.localToWorld(V(0, 2.8, 0.4));
-      for (let k = 0; k < 7; k++) bubbles.push({ x: p.x + (Math.random() - 0.5) * 2, z: p.z + (Math.random() - 0.5), y: p.y, vy: 1.2 + Math.random(), size: 0.25 + Math.random() * 0.4, ph: Math.random() * 6 });
-      o.next = 7 + Math.random() * 8;
+    if (k === 'chest' && o.next <= 0 && !a) { bubbleBurst(o.root.localToWorld(V(0, 2.8, 0.4)), 7, 2); o.next = 7 + Math.random() * 8; }
+    if (k === 'ship' && o.next <= 0 && !a) { bubbleBurst(o.root.localToWorld(V(1.4, 1.0, 1.5)), 3, 0.6); o.next = 2.5 + Math.random() * 3; }
+    if (k === 'marimo' && o.next <= 0 && !a) { const p = o.root.localToWorld(V((Math.random() - 0.5) * 2, 3.2, (Math.random() - 0.5) * 2)); bubbles.push({ x: p.x, z: p.z, y: p.y, vy: 0.9, size: 0.18, ph: Math.random() * 6 }); o.next = 1.2 + Math.random() * 2.5; }
+    if ((k === 'glowG' || k === 'glowR') && o.next <= 0) { const p = o.root.localToWorld(V((Math.random() - 0.5) * 5, 0.6, 0)); sparkle(p.x, p.y, p.z, 1, 0.8, k === 'glowG' ? M.stickG : M.stickR); o.next = 0.25 + Math.random() * 0.4; }
+    if (k === 'sub') {
+      if (o.prop) o.prop.rotation.x += dt * (a ? 14 : 1.2);
+      if (!a) { o.root.position.y = rp.y + Math.sin(t * 0.8 + o.bob) * 0.25; o.root.rotation.z = Math.sin(t * 0.6 + o.bob) * 0.03; }
     }
+    if (k === 'coral' && !a) o.root.rotation.z = Math.sin(t * 0.5 + o.bob) * 0.012;
     if (!a) return;
-    const k = o.type;
+    // clicked
     if (k === 'ipod') {                     // it sits up, turns to you and the screen blinks awake
       const ph = presentPose(o, a, { lift: 3.5, tiltX: Math.PI / 2 - 0.15, hold: 2.0 });
       if (ph === 1) { const k2 = a.t - 0.7; if (k2 < 1.6 && Math.floor(k2 * 5) % 2 === 0) U.uFlash.value = 1; if (Math.random() < 0.25) { const c = o.root.localToWorld(V(0, 1, -1.6)); sparkle(c.x, c.y, c.z, 1, 3); } }
-    } else if (k === 'mason') {             // it rises, faces you and glows gold
-      const ph = presentPose(o, a, { lift: 2.2, tiltX: 0, rise: 0.9, hold: 2.2, back: 1.0 });
-      if (ph >= 0) U.uMGlow.value = Math.max(U.uMGlow.value, ph === 0 ? a.t / 0.9 : ph === 1 ? 1 : 0);
-      if (ph >= 0 && ph < 2 && Math.random() < 0.8) { const c = o.root.localToWorld(V(0, 3.2, 0.3)), r = 4 + Math.random() * 2, an = Math.random() * 6.28; sparkle(c.x + Math.cos(an) * r, c.y + Math.sin(an) * r, c.z, 1, 0.6, M.masonBrass); }
+      if (!a.s && a.t > 0.75) { a.s = true; sfx('blip'); }
     } else if (k === 'chest') {             // a rattle, the lid flies open, coins glint, it shuts, then props open again
       const tl = Math.max(0, a.t - 0.35); let ang;
       o.root.rotation.z = a.t < 0.35 ? Math.sin(a.t * 60) * 0.06 : 0;
@@ -1668,34 +1929,91 @@
       else { ang = -0.6; o.anim = null; }
       o.lid.rotation.x = ang;
       if (tl > 0.45 && !a.burst) {
-        a.burst = true;
+        a.burst = true; sfx('chime');
         const p = o.root.localToWorld(V(0, 2.6, 0.2));
-        for (let n = 0; n < 16; n++) bubbles.push({ x: p.x + (Math.random() - 0.5) * 3, z: p.z + (Math.random() - 0.5) * 1.5, y: p.y, vy: 1.4 + Math.random() * 1.5, size: 0.3 + Math.random() * 0.5, ph: Math.random() * 6 });
+        bubbleBurst(p, 16, 3);
         sparkle(p.x, p.y + 1, p.z, 14, 3.5);
-        for (let n = 0; n < 22; n++) sparkle(p.x + (Math.random() - 0.5) * 3, p.y + 0.5 + Math.random() * 4, p.z, 1, 1, M.masonBrass);
+        for (let n = 0; n < 22; n++) sparkle(p.x + (Math.random() - 0.5) * 3, p.y + 0.5 + Math.random() * 4, p.z, 1, 1, M.brass);
       }
     } else if (k === 'diver') {             // a big exhale and a little wobble
-      if (!a.burst) { a.burst = true; const p = o.root.localToWorld(V(0, 7.9, 0)); for (let n = 0; n < 16; n++) bubbles.push({ x: p.x + (Math.random() - 0.5), z: p.z + (Math.random() - 0.5), y: p.y - Math.random() * 2, vy: 1.6 + Math.random() * 2, size: 0.3 + Math.random() * 0.5, ph: Math.random() * 6 }); }
+      if (!a.burst) { a.burst = true; bubbleBurst(o.root.localToWorld(V(0, 7.9, 0)), 16, 1); }
       o.root.rotation.z = Math.sin(a.t * 8) * 0.12 * Math.max(0, 1 - a.t / 1.4);
       if (a.t > 1.4) { o.root.rotation.z = 0; o.anim = null; }
-    } else if (k === 'cd') {
-      presentCd(o, a, t, water);
-    } else {                                // everything else: a hop and a wiggle
+    } else if (k === 'tarot') {
+      if (!a.s) { a.s = true; sfx('chime'); }
+      presentCard(o, a, t, water);
+    } else if (k === 'coral') {             // it spawns: a slow cloud of pink and peach specks drifts up
+      if (!a.s) { a.s = true; sfx('blip'); }
+      const u = a.t / 2.4;
+      o.root.scale.setScalar(o.sc * (1 + 0.06 * Math.sin(Math.min(1, u) * Math.PI) * Math.sin(a.t * 10)));
+      if (u < 0.8 && Math.random() < 0.9) for (let n = 0; n < 2; n++) { const p = o.root.localToWorld(V((Math.random() - 0.5) * 6, 3 + Math.random() * 3, (Math.random() - 0.5) * 6)); sparkles.push({ x: p.x, y: p.y, z: p.z, vy: 0.6 + Math.random() * 0.6, life: 2.2, max: 2.2, mat: Math.random() < 0.6 ? M.coralTip : M.coral }); }
+      if (u >= 1) { o.root.scale.setScalar(o.sc); o.anim = null; }
+    } else if (k === 'marimo') {            // it fills with tiny bubbles, floats up to the surface, rolls over, and sinks home
+      const up = water - 3.6 * o.sc, T1 = 2.4, T2 = T1 + 1.6, T3 = T2 + 2.6;
+      let y, roll;
+      if (a.t < T1) { const u = ease(a.t / T1); y = lerp(rp.y, up, u); roll = u * 1.2; if (Math.random() < 0.6) bubbleBurst(o.root.localToWorld(V(0, 1.6, 0)), 1, 3, 0.6); }
+      else if (a.t < T2) { y = up + Math.sin((a.t - T1) * 3) * 0.15; roll = 1.2 + (a.t - T1) * 0.6; if (!a.r) { a.r = true; addRipple(o.x, o.z, 0.5, t); } }
+      else if (a.t < T3) { const u = ease((a.t - T2) / (T3 - T2)); y = lerp(up, rp.y, u); roll = 2.16 + u * 1.0; }
+      else { o.root.position.copy(rp); o.root.rotation.copy(rr); o.anim = null; sandPuff(o.x, rp.y + 0.2, o.z, 8); return; }
+      o.root.position.set(rp.x, y, rp.z); o.root.rotation.set(rr.x + roll, rr.y, rr.z);
+    } else if (k === 'sanddollar') {        // a coin toss: up, two flips, and down with a puff of sand
+      const u = Math.min(1, a.t / 1.4);
+      if (!a.s) { a.s = true; sandPuff(o.x, rp.y + 0.2, o.z, 10); }
+      o.root.position.set(rp.x, rp.y + Math.sin(u * Math.PI) * 5, rp.z);
+      o.root.rotation.set(rr.x + ease(u) * Math.PI * 4, rr.y + u * 0.6, rr.z);
+      if (u >= 1) { o.root.position.copy(rp); o.root.rotation.set(rr.x, rr.y + 0.6, rr.z); rr.y += 0.6; o.anim = null; sandPuff(o.x, rp.y + 0.2, o.z, 12); }
+    } else if (k === 'glowG' || k === 'glowR') {   // crack! it flares, the light pool blooms, and green (or red) sparks rise
+      if (!a.s) { a.s = true; o.burst = 1.6; sfx('pop'); }
+      const u = a.t / 1.0;
+      o.root.position.set(rp.x, rp.y + Math.sin(Math.min(1, u) * Math.PI) * 1.4, rp.z);
+      o.root.rotation.set(rr.x, rr.y, rr.z + Math.sin(a.t * 18) * 0.18 * Math.max(0, 1 - u));
+      if (Math.random() < 0.9) { const p = o.root.localToWorld(V((Math.random() - 0.5) * 5, 0.5, 0)); sparkle(p.x, p.y, p.z, 2, 1.5, k === 'glowG' ? M.stickG : M.stickR); }
+      if (u >= 1) { o.root.position.copy(rp); o.root.rotation.copy(rr); o.anim = null; }
+    } else if (k === 'inhaler') {           // pff: the canister presses down and a puff of mist bursts out of the mouthpiece
+      if (!a.s) { a.s = true; sfx('puff'); }
+      const u = a.t / 1.2, press = a.t < 0.15 ? a.t / 0.15 : Math.max(0, 1 - (a.t - 0.15) / 0.3);
+      o.root.scale.set(o.sc, o.sc * (1 - 0.06 * press), o.sc);
+      o.root.position.set(rp.x, rp.y + (a.t > 0.15 && a.t < 0.55 ? Math.sin(((a.t - 0.15) / 0.4) * Math.PI) * 0.8 : 0), rp.z);
+      if (a.t > 0.12 && a.t < 0.5) for (let n = 0; n < 5; n++) { const p = o.root.localToWorld(V((Math.random() - 0.5) * 1.2, 0.6 + (Math.random() - 0.5) * 0.8, 2.4 + Math.random() * 1.5)); sparkles.push({ x: p.x, y: p.y, z: p.z, vy: 0.3 + Math.random() * 0.5, life: 1.4, max: 1.4, mat: M.paper }); }
+      if (u >= 1) { o.root.scale.setScalar(o.sc); o.root.position.copy(rp); o.anim = null; }
+    } else if (k === 'sharpie') {           // the cap pops off, flips through the water and clicks back on
+      if (!a.s) { a.s = true; sfx('pop'); }
+      const u = Math.min(1, a.t / 1.5), c = o.cap;
+      c.position.set(1.2 + Math.sin(u * Math.PI) * 1.2, 0.42 + Math.sin(u * Math.PI) * 4.5, 0);
+      c.rotation.z = ease(u) * Math.PI * 2;
+      if (u > 0.05 && u < 0.5 && Math.random() < 0.5) { const p = o.root.localToWorld(V(1.0, 0.5, 0)); sparkle(p.x, p.y, p.z, 1, 0.3, M.ink); }
+      if (u >= 1) { c.position.set(1.2, 0.42, 0); c.rotation.z = 0; o.anim = null; sfx('blip'); }
+    } else if (k === 'ship') {              // it creaks over, a gust of trapped air escapes, a coin or two glints
+      if (!a.s) { a.s = true; sfx('clunk'); bubbleBurst(o.root.localToWorld(V(1.4, 1.0, 1.5)), 30, 1.5, 1.2); bubbleBurst(o.root.localToWorld(V(-3, 2.5, 0)), 14, 1.5); }
+      o.root.rotation.z = rr.z + Math.sin(a.t * 3.2) * 0.1 * Math.exp(-a.t * 1.1);
+      if (a.t < 1.2 && Math.random() < 0.3) { const p = o.root.localToWorld(V(1.4, 1.2, 1.5)); sparkle(p.x, p.y, p.z, 1, 1, M.brass); }
+      if (a.t > 2.6) { o.root.rotation.copy(rr); o.anim = null; }
+    } else if (k === 'sub') {               // it powers up, rises and makes a lap of the tank, then parks again
+      const T1 = 1.0, T2 = T1 + 7, T3 = T2 + 1.4, R = Math.min(shape.a, shape.b) * 0.45;
+      if (!a.c) { a.c = pullInside(V(-rp.x * 0.5, 0, -rp.z * 0.5), 0.5); a.a0 = Math.atan2(rp.z - a.c.z, rp.x - a.c.x); a.R = Math.min(R, Math.hypot(rp.x - a.c.x, rp.z - a.c.z) || R); sfx('blip'); }
+      const lift = Math.max(rp.y + 2, water - 4.2 * o.sc);          // up near the top, clear of the rocks
+      let p, yaw;
+      if (a.t < T1) { const u = ease(a.t / T1); p = V(rp.x, lerp(rp.y, lift, u), rp.z); yaw = rr.y; }
+      else if (a.t < T2) {
+        const u = (a.t - T1) / (T2 - T1), an = a.a0 + ease(u) * Math.PI * 2;
+        p = V(a.c.x + Math.cos(an) * a.R, lift + Math.sin(u * Math.PI * 2) * 1.2, a.c.z + Math.sin(an) * a.R);
+        yaw = -an - Math.PI / 2;             // nose along the circle
+        if (Math.random() < 0.7) { const q = o.root.localToWorld(V(-3.3, 1.2, 0)); bubbles.push({ x: q.x, z: q.z, y: q.y, vy: 1.2, size: 0.25, ph: Math.random() * 6 }); }
+      } else if (a.t < T3) { const u = ease((a.t - T2) / (T3 - T2)); p = V(rp.x, lerp(lift, rp.y, u), rp.z); yaw = rr.y; }
+      else { o.root.position.copy(rp); o.root.rotation.copy(rr); o.anim = null; return; }
+      o.root.position.copy(p);
+      const cur = o.root.rotation.y; o.root.rotation.set(rr.x, cur + Math.atan2(Math.sin(yaw - cur), Math.cos(yaw - cur)) * Math.min(1, dt * 3), 0);
+    } else {                                // anything else: a hop and a wiggle
       const u = a.t / 0.9;
-      if (!a.burst) { a.burst = true; const p = o.root.localToWorld(V(0, 0.5, 0)); for (let n = 0; n < 6; n++) bubbles.push({ x: p.x + (Math.random() - 0.5) * 2, z: p.z, y: p.y, vy: 1.4, size: 0.3, ph: Math.random() * 6 }); }
-      if (u >= 1) { o.root.position.copy(o.rest.pos); o.root.rotation.copy(o.rest.rot); o.anim = null; }
-      else { o.root.position.y = o.rest.pos.y + Math.sin(u * Math.PI) * 1.8; o.root.rotation.y = o.rest.rot.y + Math.sin(u * Math.PI * 3) * 0.45; }
+      if (!a.burst) { a.burst = true; bubbleBurst(o.root.localToWorld(V(0, 0.5, 0)), 6, 2); }
+      if (u >= 1) { o.root.position.copy(rp); o.root.rotation.copy(rr); o.anim = null; }
+      else { o.root.position.y = rp.y + Math.sin(u * Math.PI) * 1.8; o.root.rotation.y = rr.y + Math.sin(u * Math.PI * 3) * 0.45; }
     }
   }
-  function placeItem(b, type, pos, ry, scale) {
-    const g = itemGeometry(type), mats = g.userData.mats;
-    const m = new T.Matrix4().compose(pos, new T.Quaternion().setFromEuler(new T.Euler(0, ry, 0)), V(scale, scale, scale));
-    const nm = new T.Matrix3().getNormalMatrix(m);
-    const P = g.attributes.position, Nn = g.attributes.normal, p = new T.Vector3(), n = new T.Vector3();
-    for (let i = 0; i < P.count; i++) {
-      p.fromBufferAttribute(P, i).applyMatrix4(m); n.fromBufferAttribute(Nn, i).applyMatrix3(nm).normalize();
-      b.v(p, n, mats[i]);
-    }
+  function pokeFind(o) {
+    if (!o || o.anim || o.drop) return;
+    o.anim = { t: 0 };
+    if (o.type === 'duck') sfx('squeak');
   }
 
   // ================================================================ goldfish + koi (one per finished pom, reset at midnight): the v1.2 fish
@@ -1727,13 +2045,13 @@
     return b.build();
   }
   // the earned fish appears big above the tank, spins, dives in with a splash, then does a happy lap
-  function revealFish() {
+  function revealFish(ride = true) {      // ride: the camera meets it in the sky (not when a focus session is starting)
     if (!(state.pendingFish > 0)) return;
     state.pendingFish -= 1; save();
     const i = state.fish.length - 1 - state.pendingFish;
     const o = makeFishObj(i);
     o.mode = 'intro'; o.mt = -0.2;
-    startFollow(o, true);           // the camera meets it in the sky and rides the dive down
+    if (ride) startFollow(o, true);           // the camera meets it in the sky and rides the dive down
     o.mesh.visible = false;
     fishObjs.push(o);
     updateFishLabel();
@@ -2253,9 +2571,13 @@
     o.curl = -side * 0.85 * k; o.spd += 3 * k; o.thrust = 1.4;
   }
 
-  // ---- the jump: a burst toward the surface, a real arc with the nose following the flight, a head-first landing
-  const G_AIR = 34;
-  function pokeFish(o) {
+  // ---- the jumps: a burst toward the surface, then one of three flights (never the same one twice in a row):
+  //   arc:  a real arc with the nose following the flight, sometimes a twist, a head-first landing
+  //   flop: nearly straight up, tips over at the top and slaps down flat on its side
+  //   skip: low and fast, skipping across the surface like a stone, each hop smaller
+  const G_AIR = 34, LEAPS = ['arc', 'flop', 'skip'];
+  let lastLeap = '';
+  function pokeFish(o, kind) {
     if (o.classic || !FCFG.leap2) return pokeFishClassic(o);
     if (o.mode !== 'swim' && o.mode !== 'celebrate') return;
     if (o.goal && scene2) endScene();
@@ -2263,55 +2585,82 @@
     if (dir.lengthSq() < 0.1) dir = V(1, 0, 0);
     dir.applyAxisAngle(UP, (Math.random() - 0.5) * 1.6);
     if (!inside(o.p.x + dir.x * 9, o.p.z + dir.z * 9, 3)) dir.negate();
+    if (!LEAPS.includes(kind)) { const pool = LEAPS.filter((k) => k !== lastLeap); kind = pool[Math.floor(Math.random() * pool.length)]; }
+    lastLeap = kind;
     o.mode = 'leap2'; o.goal = null;
-    o.lp = { ph: 'rush', t: 0, dir, twist: Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) : 0, H: 4.2 + Math.random() * 1.8, D: 6 + Math.random() * 2.5 };
+    const r = Math.random();
+    o.lp = kind === 'flop' ? { kind, ph: 'rush', t: 0, dir, side: Math.random() < 0.5 ? -1 : 1, H: 6.6 + r * 1.2, D: 2 + r * 1.2 }
+         : kind === 'skip' ? { kind, ph: 'rush', t: 0, dir, H: 1.5, D: 4.2, hops: [0.85, 0.45] }
+         : { kind, ph: 'rush', t: 0, dir, twist: Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) : 0, H: 4.2 + r * 1.8, D: 6 + r * 2.5 };
     startle(o, o.p.clone().addScaledVector(dir, -2), 0.8);
   }
   function leap2Step(o, dt, t, water) {
     const L = o.lp; L.t += dt;
     if (L.ph === 'rush') {
-      const tgt = o.p.clone().addScaledVector(L.dir, 2.5); tgt.y = water + 0.5;
-      o.goal = { p: tgt, v: 11, fast: true, look: tgt }; steer(o, dt, t, water); o.goal = null;
-      o.pitch = Math.max(o.pitch, lerp(0, 0.75, Math.min(1, L.t * 2)));
+      const tgt = o.p.clone().addScaledVector(L.dir, L.kind === 'skip' ? 5 : 2.5); tgt.y = water + 0.5;
+      o.goal = { p: tgt, v: L.kind === 'skip' ? 12.5 : 11, fast: true, look: tgt }; steer(o, dt, t, water); o.goal = null;
+      o.pitch = Math.max(o.pitch, lerp(0, L.kind === 'skip' ? 0.4 : L.kind === 'flop' ? 1.0 : 0.75, Math.min(1, L.t * 2)));
       if (o.p.y >= water - 0.75 || L.t > 2.4) {
         const vy = Math.sqrt(2 * G_AIR * L.H), T_ = 2 * vy / G_AIR;
-        let D = L.D; while (D > 2 && !inside(o.p.x + L.dir.x * D, o.p.z + L.dir.z * D, 3)) D -= 0.5;
+        let D = L.D; while (D > 1 && !inside(o.p.x + L.dir.x * D, o.p.z + L.dir.z * D, 3)) D -= 0.5;
         L.vel = V(L.dir.x * D / T_, vy, L.dir.z * D / T_); L.ph = 'air'; L.t = 0; L.T = T_;
         o.yaw += wrapPi(yawTo(L.dir) - o.yaw);
-        addRipple(o.p.x, o.p.z, 0.9, U.uTime.value); splash(o.p.x, water, o.p.z, 18, 0.7);
+        addRipple(o.p.x, o.p.z, 0.9, U.uTime.value); splash(o.p.x, water, o.p.z, L.kind === 'flop' ? 28 : 18, 0.7);
       }
     } else if (L.ph === 'air') {
       L.vel.y -= G_AIR * dt; o.p.addScaledVector(L.vel, dt);
       const u = clamp(L.t / L.T, 0, 1), hs = Math.hypot(L.vel.x, L.vel.z);
-      o.pitch = Math.atan2(L.vel.y, hs);
-      o.arch = -0.32 * Math.sin(Math.PI * u);                         // a bow shape over the top of the arc
-      o.roll = L.twist ? L.twist * Math.PI * 0.5 * ease(u) : 0.22 * Math.sin(u * Math.PI * 2);
+      const fly = Math.atan2(L.vel.y, hs);
+      if (L.kind === 'flop') {                                        // up nose-first, then tips over to land flat on its side
+        const k = smooth(0.4, 0.85, u);
+        o.pitch = lerp(fly, 0, k); o.roll = L.side * Math.PI * 0.5 * smooth(0.3, 0.9, u);
+        o.arch = -0.28 * Math.sin(Math.PI * u); o.curl = L.side * 0.35 * Math.sin(Math.PI * u);
+      } else if (L.kind === 'skip') {
+        o.pitch = fly * 0.7; o.arch = -0.12 * Math.sin(Math.PI * u); o.roll = 0.12 * Math.sin(u * Math.PI * 2);
+      } else {
+        o.pitch = fly;
+        o.arch = -0.32 * Math.sin(Math.PI * u);                       // a bow shape over the top of the arc
+        o.roll = L.twist ? L.twist * Math.PI * 0.5 * ease(u) : 0.22 * Math.sin(u * Math.PI * 2);
+      }
       o.thrust = 0.9; o.spd = Math.hypot(hs, L.vel.y);
-      tailBeat(o, dt, 1.5);
+      tailBeat(o, dt, L.kind === 'skip' ? 2 : 1.5);
       o.look.x += (0 - o.look.x) * Math.min(1, dt * 10); o.look.y += (-0.5 - o.look.y) * Math.min(1, dt * 10);
       if (Math.random() < 0.6) splashes.push({ x: o.p.x - L.vel.x * 0.05, y: o.p.y, z: o.p.z - L.vel.z * 0.05, vx: (Math.random() - 0.5) * 1.5, vz: (Math.random() - 0.5) * 1.5, vy: L.vel.y * 0.2 });
       if (o.p.y < water && L.vel.y < 0) {
+        // a skip: bounce off the surface into a smaller hop, if there's room ahead
+        if (L.kind === 'skip' && L.hops.length) {
+          const vy = Math.sqrt(2 * G_AIR * L.hops.shift()), T_ = 2 * vy / G_AIR;
+          L.vel.x *= 0.85; L.vel.z *= 0.85;
+          if (inside(o.p.x + L.vel.x * T_, o.p.z + L.vel.z * T_, 3)) {
+            o.p.y = water; L.vel.y = vy; L.t = 0; L.T = T_;
+            addRipple(o.p.x, o.p.z, 0.8, U.uTime.value); addRipple(o.p.x, o.p.z, 0.4, U.uTime.value + 0.2); splash(o.p.x, water, o.p.z, 16, 0.6);
+            return;
+          }
+        }
         L.ph = 'under'; L.t = 0;
-        const big = L.twist ? 1.15 : 0.75;
-        addRipple(o.p.x, o.p.z, 1.3 * big, U.uTime.value); addRipple(o.p.x, o.p.z, 0.7, U.uTime.value + 0.3); splash(o.p.x, water, o.p.z, Math.round(26 * big), big);
+        const big = L.kind === 'flop' ? 1.6 : L.twist ? 1.15 : L.kind === 'skip' ? 0.6 : 0.75;
+        addRipple(o.p.x, o.p.z, 1.3 * big, U.uTime.value); addRipple(o.p.x, o.p.z, 0.7 * big, U.uTime.value + 0.3); splash(o.p.x, water, o.p.z, Math.round(26 * big * big), big);
+        if (L.kind === 'flop') { addRipple(o.p.x, o.p.z, 2.4, U.uTime.value + 0.55); L.vel.multiplyScalar(0.3); }      // a flat body stops short
+        if (L.kind === 'skip') L.vel.y *= 0.4;
         L.trail = 0.7;
       }
-    } else if (L.ph === 'under') {
-      L.vel.multiplyScalar(Math.exp(-dt * 2.6)); L.vel.y += 16 * dt;                    // slows and curves back up, a J under the water
+    } else {
+      // under: it glides out of the dive and levels off below the surface, then swims straight on, no pause
+      L.vel.x *= Math.exp(-dt * 1.1); L.vel.z *= Math.exp(-dt * 1.1);
+      L.vel.y += (0 - L.vel.y) * (1 - Math.exp(-dt * 3));
       o.p.addScaledVector(L.vel, dt);
       const hs = Math.hypot(L.vel.x, L.vel.z), floor = terrain.height(o.p.x, o.p.z) + 1.6;
       if (o.p.y < floor) { o.p.y = floor; L.vel.y = Math.max(0, L.vel.y); }
       if (o.p.y > water - 1.2) { o.p.y = water - 1.2; L.vel.y = Math.min(0, L.vel.y); }
       if (!inside(o.p.x, o.p.z, 2.5)) pullInside(o.p, 0.92);
       o.pitch += (Math.atan2(L.vel.y, hs + 0.5) - o.pitch) * Math.min(1, dt * 6);
-      o.roll *= Math.exp(-dt * 5); o.spd = L.vel.length();
+      o.roll *= Math.exp(-dt * 4); o.spd = L.vel.length();
       if (L.trail > 0) { L.trail -= dt; bubbles.push({ x: o.p.x + (Math.random() - 0.5) * 0.6, z: o.p.z + (Math.random() - 0.5) * 0.6, y: o.p.y + 0.3, vy: 0.8 + Math.random(), size: 0.2 + Math.random() * 0.4, ph: Math.random() * 6 }); }
-      o.thrust = 0.5; tailBeat(o, dt, 0.8);
-      if (L.t > 1.1) { L.ph = 'shake'; L.t = 0; }
-    } else {                                                          // shakes it off, then swims away
-      o.p.addScaledVector(L.vel, dt); L.vel.multiplyScalar(Math.exp(-dt * 3));
-      o.amp = 0.16; o.phase += Math.PI * 2 * 6.5 * dt; o.pitch *= Math.exp(-dt * 4);
-      if (L.t > 0.4) { o.mode = 'swim'; o.spd = Math.max(1.5, L.vel.length()); o.thrust = 1; o.kg = { kick: true, left: 1.2 }; o.t = swimPoint(); o.lp = null; }
+      o.thrust = 0.7; tailBeat(o, dt, 1.1);
+      if (L.t > 1.0) {
+        const ahead = o.p.clone().addScaledVector(L.dir, 8); pullInside(ahead, 0.8); ahead.y = clamp(o.p.y, terrain.height(ahead.x, ahead.z) + 2, water - 1.5);
+        o.mode = 'swim'; o.spd = Math.max(1.5, hs); o.thrust = 1; o.kg = { kick: true, left: 1.2 }; o.t = ahead; o.lp = null;
+      }
     }
   }
 
@@ -2731,57 +3080,104 @@
   }
 
   // ================================================================ timer
-  function remaining() { const tm = state.timer; return tm.mode.endsWith('-run') ? Math.max(0, (tm.endsAt - Date.now()) / 1000) : tm.remaining; }
+  function remaining() { const tm = state.timer; return tm.mode === 'run' ? Math.max(0, (tm.endsAt - Date.now()) / 1000) : tm.remaining; }
   const fmt = (sec) => { sec = Math.ceil(sec); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
   const fmt2 = (sec) => { sec = Math.ceil(sec); return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`; };
-  function startPhase(kind) {
-    const mins = kind === 'focus' ? FOCUS_MIN : REST_MIN;
-    if (kind === 'focus') brainLeave();
-    music.fresh[kind] = true;
-    state.timer = { mode: `${kind}-run`, endsAt: Date.now() + mins * 60000, remaining: mins * 60 };
+  const fullLen = (kind) => LEN_MIN[kind] * 60;
+  // what comes after a session: a rest leads back to focus; a focus leads to a short rest, or to the long one once the round has 4
+  const nextKind = (kind) => (kind === 'focus' ? (state.cycle >= ROUND ? 'long' : 'short') : 'focus');
+  function readyFor(kind, from) {
+    state.timer = { mode: 'ready', kind, endsAt: 0, remaining: fullLen(kind) };
+    if (from) state.timer.from = from;          // lets a second open tab see this session was already counted
   }
-  // after "call it a day" the start screen is just the title, so you can wander the tank with no timer asking for anything.
-  // Clicking the title brings "start focus" back.
-  let dayPeek = false;
-  const dayOver = () => !!state.brain && !dayPeek;
+  function startSession(kind) {
+    if (kind === 'focus') brainLeave();
+    music.fresh[kind === 'focus' ? 'focus' : 'rest'] = true;
+    state.timer = { mode: 'run', kind, endsAt: Date.now() + fullLen(kind) * 1000, remaining: fullLen(kind) };
+    // what the last focus earned drops in as the next session starts (no camera ride into a focus)
+    if (state.pendingFish > 0) revealFish(kind !== 'focus');
+    if (state.pendingItem > 0) revealItem(kind !== 'focus');
+  }
+  // a session with time already on it: switching or skipping would throw that away
+  const hasProgress = () => { const tm = state.timer; return tm.mode === 'run' || (tm.mode === 'pause' && tm.remaining < fullLen(tm.kind) - 1); };
   function timerPress() {
     audio();     // unlock sound on the first press
     const tm = state.timer;
-    if (tm.mode === 'idle' && dayOver()) {
-      if (!timerAnim) withTimerDither(() => { dayPeek = true; renderTimerText(true); announce(); });
-      return;
-    }
-    if (tm.mode === 'idle' || tm.mode === 'rest-done') startPhase('focus');
-    else if (tm.mode === 'focus-done') { startPhase('rest'); revealFish(); }
-    else if (tm.mode.endsWith('-run')) { tm.remaining = remaining(); tm.mode = tm.mode.replace('-run', '-pause'); }
-    else { tm.endsAt = Date.now() + tm.remaining * 1000; tm.mode = tm.mode.replace('-pause', '-run'); }
-    save(); renderTimerText(true); announce(); primeMusic();
+    setArmed(null);
+    if (tm.mode === 'idle') startSession('focus');
+    else if (tm.mode === 'ready') startSession(tm.kind);
+    else if (tm.mode === 'run') { tm.remaining = remaining(); tm.mode = 'pause'; }
+    else { tm.endsAt = Date.now() + tm.remaining * 1000; tm.mode = 'run'; }
+    save(); renderTimerText(true); announce(); primeMusic(); wake();
   }
-  function timerReset() { state.timer = { mode: 'idle', endsAt: 0, remaining: FOCUS_MIN * 60 }; while (state.pendingFish > 0) revealFish(); save(); renderTimerText(true); announce(); }
-  // paused: a "reset timer" button under the timer. It dithers the timer away to the start screen; undo brings it back
-  function updateTimerActions() {
-    const box = document.getElementById('timerActions'); if (!box) return;
-    // two jobs share this slot: "reset timer" while paused, and "call it a day" once a focus session ends
-    const askDone = state.timer.mode === 'focus-done' && !state.brain && undoWhere !== 'timer';
-    box.dataset.kind = askDone ? 'done' : 'reset';
-    box.hidden = !(state.timer.mode.endsWith('-pause') || undoWhere === 'timer' || askDone) || !!timerAnim;
+  function timerReset() { state.timer = { mode: 'idle', kind: 'focus', endsAt: 0, remaining: fullLen('focus') }; while (state.pendingFish > 0) revealFish(); while (state.pendingItem > 0) revealItem(false); save(); renderTimerText(true); announce(); }
+  // A tap that would throw away time already on the clock (a tab, or skip) waits for a second tap within 3 s.
+  // No dialog: the control itself says "Tap again".
+  let armed = null, armTimer = 0;
+  function setArmed(key) {
+    armed = key; clearTimeout(armTimer);
+    if (key) armTimer = setTimeout(() => setArmed(null), 3000);
+    const tabs = document.getElementById('modeTabs'), skip = document.getElementById('skipBtn');
+    if (!tabs) return;
+    tabs.classList.toggle('armed', !!key && key.startsWith('tab-'));
+    tabs.querySelectorAll('button[data-kind]').forEach((b) => b.classList.toggle('armed', key === `tab-${b.dataset.kind}`));
+    skip.classList.toggle('armed', key === 'skip');
+  }
+  // the tabs: any of them sets that session up fresh, ready to start
+  function chooseKind(kind) {
+    if (timerAnim || !LEN_MIN[kind]) return;
+    const tm = state.timer;
+    if (tm.mode === 'ready' && tm.kind === kind) return;              // already set up
+    if (hasProgress() && armed !== `tab-${kind}`) { setArmed(`tab-${kind}`); return; }
+    setArmed(null);
+    withTimerDither(() => { readyFor(kind); save(); renderTimerText(true); announce(); });
+    $('live').textContent = `${KIND_NAME[kind]}, ${LEN_MIN[kind]} minutes. Ready to start.`;
+  }
+  // skip: set up the next session in the round. A skipped focus doesn't count toward the round (or earn a koi).
+  function skipSession() {
+    if (timerAnim || state.timer.mode === 'idle') return;
+    if (hasProgress() && armed !== 'skip') { setArmed('skip'); return; }
+    setArmed(null);
+    const k = state.timer.kind;
+    if (k === 'long') state.cycle = 0;                  // the long rest closes the round, taken or not
+    const next = nextKind(k);
+    withTimerDither(() => { readyFor(next); save(); renderTimerText(true); announce(); });
+    $('live').textContent = `Skipped. ${KIND_NAME[next]} is next.`;
+  }
+  // the controls around the timer: session tabs and round squares above the digits; start / pause, skip and
+  // "call it a day" below; a pause mark over the digits while paused
+  function setShown(el, on) {
+    if (!el || el._shown === on) return;
+    el._shown = on;
+    if (on) { el.hidden = false; ditherEl(el, true, 320); }
+    else ditherEl(el, false, 240, () => { if (!el._shown) { el.hidden = true; setMask(el, null); } });
+  }
+  function syncTimerUI() {
+    const tabs = document.getElementById('modeTabs'); if (!tabs) return;
+    const tm = state.timer, title = tm.mode === 'idle';
+    setShown(tabs, !title);
+    setShown($('cycleDots'), !title);
+    setShown($('timerActions'), true);
+    $('startBtn').hidden = tm.mode === 'run';
+    $('pauseBtn').hidden = tm.mode !== 'run';
+    $('skipBtn').hidden = title;
+    setShown($('pauseMark'), tm.mode === 'pause');
+    tabs.querySelectorAll('button[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(!title && b.dataset.kind === tm.kind)));
+    const done = Math.min(ROUND, state.cycle);
+    $('cycleDots').querySelectorAll('span').forEach((d, i) => d.classList.toggle('on', i < done));
+    $('cycleDots').setAttribute('aria-label', `${done} of ${ROUND} focus sessions done this round`);
+    $('skipBtn').setAttribute('aria-label', `Skip to ${KIND_NAME[nextKind(tm.kind)].toLowerCase()}`);
   }
   function placeTimerActions() {
-    const box = document.getElementById('timerActions'); if (!box || box.hidden || !band) return;
-    const oy = (window.innerHeight - grid.rows * grid.chCss) / 2;
+    if (!band) return;
+    const box = $('timerActions'), oy = (window.innerHeight - grid.rows * grid.chCss) / 2, ox = (window.innerWidth - grid.cols * grid.cwCss) / 2;
     const top = Math.round(oy + (band.bandTop + band.actTop) * grid.chCss);
     if (top !== box._top) { box._top = top; box.style.top = `${top}px`; }
-  }
-  function resetTimerUndoable() {
-    if (!state.timer.mode.endsWith('-pause') || timerAnim) return;
-    const prev = JSON.parse(JSON.stringify(state.timer));
-    const restore = () => {
-      // resetting folded the focus turns into the tank's resting angle; take them back out so undo doesn't spin it around
-      if (prev.mode === 'focus-pause') { const p = clamp(1 - prev.remaining / (FOCUS_MIN * 60), 0, 1); state.view -= p * TURNS * 360; state.lastProgress = p; }
-      state.timer = prev; save(); renderTimerText(true); announce();
-    };
-    withTimerDither(() => { timerReset(); }, () => showUndo(() => withTimerDither(restore), 'timer'));
-    $('live').textContent = 'Timer cleared. Undo is available for a few seconds.';
+    // the pause mark sits on the middle of the digits, a little smaller than they are tall
+    const h = band.capR * (drawnDigit || band.digit) * grid.chCss, pm = $('pauseMark');
+    pm.style.setProperty('--d', `${Math.round(h * 0.78)}px`);
+    pm.style.left = `${Math.round(ox + (band.bandX + band.bandW / 2) * grid.cwCss)}px`;
+    pm.style.top = `${Math.round(oy + (band.bandTop + band.digitBase) * grid.chCss - h / 2)}px`;
   }
   // the timer's own dither: the digits dissolve, the swap happens, the new words fill back in
   let timerAnim = null;
@@ -2789,7 +3185,6 @@
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce || timerAnim) { swap(); if (after) after(); return; }
     timerAnim = { phase: 'out', t: 0, swap, after };
-    updateTimerActions();
   }
   function stepTimerDither(dt) {
     const a = timerAnim; if (!a) return;
@@ -2800,28 +3195,32 @@
       if (u >= 1) { a.swap(); a.phase = 'in'; a.t = 0; }
     } else {
       const u = Math.min(1, a.t / IN); asciiU.uTimerDither.value = 0.5 + 0.5 * Math.cos(Math.PI * u);
-      if (u >= 1) { asciiU.uTimerDither.value = 0; timerAnim = null; updateTimerActions(); if (a.after) a.after(); }
+      if (u >= 1) { asciiU.uTimerDither.value = 0; timerAnim = null; syncTimerUI(); if (a.after) a.after(); }
     }
   }
-  function completePom(fromTimer) {
+  function completePom(fromTimer, reward = 'koi') {
     state.growth = Math.min(MAX_POMS, state.growth + 1);
     state.evap = Math.min(MAX_POMS, state.evap + 1);
-    state.fish.push(newFish());
-    state.pendingFish = (state.pendingFish || 0) + 1;     // revealed when you start your rest
+    // revealed when you start your rest: a koi, or (the 4th focus of a round, before the long rest) a special find
+    if (reward === 'item') { state.items.push(newItem()); state.pendingItem = (state.pendingItem || 0) + 1; }
+    else { state.fish.push(newFish()); state.pendingFish = (state.pendingFish || 0) + 1; }
     // face the tank straight on for the rest
     if (fromTimer) { bell('focus-done'); }
     exitGrowthPreview(); save(); updateDrawer();
-    $('live').textContent = 'Focus session complete. Start your rest to meet a new fish, or call it a day.';
   }
   function tickTimer() {
     const tm = state.timer;
-    if (tm.mode.endsWith('-run') && remaining() <= 0) {
+    if (tm.mode === 'run' && remaining() <= 0) {
       // with Dither open in two tabs, both reach 0:00: the first one counts the session, the other takes its result
       const other = readSaved();
       if (other && other.timer && other.timer.from === tm.endsAt) { adoptSaved(other); return; }
-      if (tm.mode === 'focus-run') { state.timer = { mode: 'focus-done', endsAt: 0, remaining: 0, from: tm.endsAt }; completePom(true); updateTimerActions(); placeTimerActions(); }
-      else { state.timer = { mode: 'rest-done', endsAt: 0, remaining: 0, from: tm.endsAt }; bell('rest-done'); $('live').textContent = 'Rest is over. Start focusing when you are ready.'; }
-      save(); writeSave();
+      const k = tm.kind;
+      if (k === 'focus') { state.cycle = Math.min(ROUND, state.cycle + 1); completePom(true, state.cycle >= ROUND ? 'item' : 'koi'); }
+      else { if (k === 'long') state.cycle = 0; bell('rest-done'); }
+      const next = nextKind(k);
+      readyFor(next, tm.endsAt); setArmed(null);
+      $('live').textContent = k === 'focus' ? `Focus session done. ${KIND_NAME[next]} is ready when you are, or call it a day.` : `${KIND_NAME[k]} is over. Focus is ready when you are.`;
+      save(); writeSave(); renderTimerText(true); announce(); wake();
     }
     renderTimerText();
   }
@@ -2838,7 +3237,7 @@
   function setEndAlarm() {
     clearTimeout(endAlarm);
     const tm = state.timer;
-    if (tm.mode.endsWith('-run')) endAlarm = setTimeout(heartbeat, Math.max(0, tm.endsAt - Date.now()) + 50);
+    if (tm.mode === 'run') endAlarm = setTimeout(heartbeat, Math.max(0, tm.endsAt - Date.now()) + 50);
   }
   setInterval(heartbeat, 1000);
   document.addEventListener('visibilitychange', heartbeat);
@@ -2848,7 +3247,7 @@
   let wakeLock = null;
   function syncWakeLock() {
     if (!navigator.wakeLock) return;
-    const want = state.timer.mode.endsWith('-run') && !document.hidden;
+    const want = state.timer.mode === 'run' && !document.hidden;
     if (want && !wakeLock) {
       wakeLock = 'asking';
       navigator.wakeLock.request('screen').then((lock) => {
@@ -2862,38 +3261,38 @@
   function adoptSaved(o) {
     if (!o || !o.timer || o.fishDay !== state.fishDay) return;
     const timerChanged = JSON.stringify(o.timer) !== JSON.stringify(state.timer);
-    state.timer = o.timer; state.growth = o.growth ?? state.growth; state.evap = o.evap ?? state.evap;
+    state.timer = normTimer(o.timer); state.cycle = o.cycle ?? state.cycle; state.growth = o.growth ?? state.growth; state.evap = o.evap ?? state.evap;
     const fishChanged = (o.fish || []).length !== state.fish.length || (o.pendingFish || 0) !== state.pendingFish;
     state.fish = o.fish || []; state.pendingFish = o.pendingFish || 0;
     if (fishChanged) syncFish();
+    const itemsChanged = JSON.stringify(o.items || []) !== JSON.stringify(state.items) || (o.pendingItem || 0) !== state.pendingItem;
+    if (itemsChanged) { state.items = (o.items || []).filter((i) => i && i.type in SPECIALS); state.pendingItem = o.pendingItem || 0; syncItems(); }
     if (o.seed && (o.seed !== state.seed || o.shape !== state.shape)) { state.seed = o.seed; if (SHAPES[o.shape]) state.shape = o.shape; generate(state.seed); updateDrawer(); }
     if (!!o.brain !== !!state.brain) { state.brain = !!o.brain; if (state.brain) makeBrain(false); else brainLeave(); syncBrainUI(); }
     if (typeof o.musicVol === 'number') { state.musicVol = o.musicVol; state.musicMuted = o.musicMuted === true; syncVolUI(); }
-    if (timerChanged) { clearTimeout(endAlarm); if (state.timer.mode.endsWith('-run')) endAlarm = setTimeout(heartbeat, Math.max(0, state.timer.endsAt - Date.now()) + 50); renderTimerText(true); }
+    if (timerChanged) { clearTimeout(endAlarm); if (state.timer.mode === 'run') endAlarm = setTimeout(heartbeat, Math.max(0, state.timer.endsAt - Date.now()) + 50); renderTimerText(true); }
   }
   window.addEventListener('storage', (ev) => {
     if (ev.key !== STORE_KEY || !ev.newValue) return;
     try { adoptSaved(JSON.parse(ev.newValue)); } catch (e) { /* not ours to read */ }
   });
   function announce() {
-    const tm = state.timer, hit = $('timerHit');
-    const label = (tm.mode === 'idle' && dayOver()) ? 'Dither. Show the start focus button' : (tm.mode === 'idle' || tm.mode === 'rest-done') ? 'Start a 25 minute focus session' : tm.mode === 'focus-done' ? 'Rest up: start a 5 minute rest' : tm.mode.endsWith('-run') ? `Pause timer, ${fmt(remaining())} left` : `Resume timer, ${fmt(remaining())} left`;
+    const tm = state.timer, hit = $('timerHit'), nm = KIND_NAME[tm.kind] || 'Focus';
+    const label = tm.mode === 'idle' ? 'Start a 25 minute focus session'
+      : tm.mode === 'ready' ? `Start ${nm.toLowerCase()}, ${LEN_MIN[tm.kind]} minutes`
+      : tm.mode === 'run' ? `Pause ${nm.toLowerCase()}, ${fmt(remaining())} left`
+      : `Paused. Start ${nm.toLowerCase()} again, ${fmt(remaining())} left`;
     hit.setAttribute('aria-label', label);
   }
   // draw the timer text: label (small) + big digits or "focus"
   let lastTimerText = '';
   function timerStrings() {
-    const tm = state.timer, rem = remaining();
-    if (tm.mode === 'idle' && dayOver()) return { label: '', big: 'Dither', dim: 1, title: true };
-    if (tm.mode === 'idle') return { label: 'start focus', icon: true, big: 'Dither', dim: 1, title: true };
-    if (tm.mode === 'focus-done') return { label: 'rest up', icon: true, big: '0:00', dim: 1, waiting: true };
-    if (tm.mode === 'rest-done') return { label: 'focus', icon: true, big: '0:00', dim: 1, waiting: true };
-    const isRest = tm.mode.startsWith('rest');
-    const paused = tm.mode.endsWith('-pause');
-    return { label: paused ? 'paused' : isRest ? 'rest' : '', big: fmt(rem), dim: paused ? 0.6 : 1 };
+    const tm = state.timer;
+    if (tm.mode === 'idle') return { label: '', big: 'Dither', dim: 1, title: true };
+    return { label: '', big: fmt(remaining()), dim: 1, waiting: tm.mode === 'ready' && !!tm.from };
   }
   // fill is drawn in red; a soft blurred copy in green is the glow the screen shows on hover
-  let digitDrop = 0;
+  let digitDrop = 0, drawnDigit = 0;      // drawnDigit: the digits' size as last drawn (they shrink to fit narrow screens)
   function drawTimer(ctx, w, h, sx, label, big, icon) {
     ctx.clearRect(0, 0, w, h);
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
@@ -2910,7 +3309,7 @@
       const dW = Math.max(...'0123456789'.split('').map((d) => ctx.measureText(d).width)) / 100 * 1.06;
       const cW = Math.max(ctx.measureText(':').width / 100 * 1.3, dW * 0.55);
       { const units = big.split('').reduce((a, c) => a + (c === ':' ? cW : dW), 0), maxW = (w / sx) * 0.94; if (bigSize * units > maxW) bigSize = maxW / units; }   // never wider than the band
-      ctx.font = `${bigSize}px ${FONT_PIXEL}`;
+      ctx.font = `${bigSize}px ${FONT_PIXEL}`; drawnDigit = bigSize;
       const slot = bigSize * dW, colon = bigSize * cW;    // fixed-width slots: no jiggle
       const widths = big.split('').map((c) => (c === ':' ? colon : slot));
       let x = -widths.reduce((a, b) => a + b, 0) / 2;
@@ -2945,10 +3344,13 @@
   let waiting = false;
   function renderTimerText(force) {
     const s = timerStrings();
-    const key = `${s.label}|${s.icon}|${s.big}|${s.dim}|${grid.cols}|${grid.rows}`;
+    const tmk = state.timer, key = `${s.big}|${tmk.mode}|${tmk.kind}|${state.cycle}|${state.pendingFish}|${grid.cols}|${grid.rows}`;
     asciiU.uOverlayDim.value = s.dim; waiting = !!s.waiting;
     const nm = state.name || 'Dither', mode = state.timer.mode;
-    document.title = mode === 'idle' ? nm : mode === 'focus-done' ? `Time to rest · ${nm}` : mode === 'rest-done' ? `Time to focus · ${nm}` : `${s.label === 'rest' ? 'rest ' : ''}${s.big} · ${nm}`;
+    const kn = KIND_NAME[state.timer.kind] || 'Focus';
+    document.title = mode === 'idle' ? nm
+      : mode === 'ready' ? (state.timer.from ? `Time for ${state.timer.kind === 'focus' ? 'focus' : `a ${kn.toLowerCase()}`} · ${nm}` : nm)
+      : `${mode === 'pause' ? 'Paused ' : ''}${state.timer.kind === 'focus' ? '' : `${kn} `}${s.big} · ${nm}`;
     if (key === lastTimerText && !force) return;
     lastTimerText = key;
     if (state.digitsIn) {
@@ -2971,7 +3373,7 @@
       if (s.label && !asType) drawLabel(lc, B, s.label, s.icon, grid.ch / grid.cw);
       lblTex.needsUpdate = true;
       updateWords(s);
-      updateTimerActions(); placeTimerActions();
+      syncTimerUI(); placeTimerActions();
     }
     asciiU.uOverlayOn.value = 1;
     announce();
@@ -3087,6 +3489,7 @@
     coffee: '<path d="M4.5 10.5h12v4a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M16.5 12h1.2a2.4 2.4 0 0 1 0 4.8h-1.6"/><path d="M8 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M11 2.8c-1 1.1 1 2.2 0 3.6"/><path d="M14 2.8c-1 1.1 1 2.2 0 3.6"/>',
     close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
     play: '<path d="M8 5.2v13.6l10.6-6.8z" fill="#000"/>',
+    skip: '<path d="M5.5 5.6v12.8l9.6-6.4z" fill="#000"/><path d="M18.6 5.4v13.2"/>',
     undo: '<path d="M3.8 12.5a8.2 8.2 0 1 0 2.6-6.4"/><path d="M3.6 3.6v5.2h5.2"/>',
     vol: '<path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/>',
     mute: '<path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
@@ -3103,38 +3506,16 @@
     if (halo) halo.style.setProperty('--mb', svgURL(ICONS[el.dataset.icon], true));
   });
 
-  // ---- undo: a button that stands in for whatever it undoes
+  // ---- undo: only "new tank" offers one (a tank layout can't be got back otherwise)
   let undoFn = null, undoTimer = 0;
   const pill = $('undoPill');
-  var undoWhere = null;      // "tank" or "timer" while an undo is offered (var: read before this line runs)
+  var undoWhere = null;      // "tank" while an undo is offered (var: read before this line runs)
   const UNDO_MS = 3000;
-  // "reset timer": undo swaps in under the timer right away, and hovering it holds it there
-  function showUndo(fn, where) {
-    if (fn) {
-      if (undoWhere === 'tank') cancelTankUndo();
-      undoFn = fn; undoWhere = where || 'timer'; wake();               // undo always arrives with the controls showing
-      $('resetBtn').after(pill); $('resetBtn').hidden = true;
-      updateTimerActions(); placeTimerActions();
-    }
-    pill.hidden = false; pill.classList.remove('leaving');
-    clearTimeout(undoTimer); clearTimeout(pill._fade);
-    pill._fade = setTimeout(() => pill.classList.add('leaving'), UNDO_MS - 280); undoTimer = setTimeout(hideUndo, UNDO_MS);
-  }
-  function hideUndo() {
-    if (undoWhere === 'tank') cancelTankUndo();
-    stopDither(pill); pill.hidden = true; pill.classList.remove('leaving'); undoFn = null; clearTimeout(undoTimer); clearTimeout(pill._fade);
-    $('resetBtn').hidden = false; undoWhere = null; updateTimerActions();
-  }
-  const timerHold = () => { if (undoWhere !== 'timer') return; pill.classList.remove('leaving'); clearTimeout(undoTimer); clearTimeout(pill._fade); };
-  const timerRelease = () => { if (undoWhere === 'timer' && undoFn) showUndo(); };
-  pill.addEventListener('mouseenter', timerHold);
-  pill.addEventListener('mouseleave', timerRelease);
-  pill.addEventListener('focus', timerHold);
-  pill.addEventListener('blur', timerRelease);
+  function hideUndo() { if (undoWhere === 'tank') cancelTankUndo(); }
   pill.onclick = () => {
     if (!undoFn || staticAnim || timerAnim) return;
     const f = undoFn;
-    if (undoWhere === 'tank') endTankUndo(); else hideUndo();
+    endTankUndo();
     f();
   };
 
@@ -3172,7 +3553,7 @@
     if (step !== tankStep) return;
     if (staticAnim) { setTimeout(() => tankBtnBack(step, focus), 100); return; }     // after an undo, wait for the old tank to settle
     const btn = $('rescapeBtn'); btn.hidden = false;
-    if (!document.body.classList.contains('idle')) ditherEl(btn, true, SWAP_MS);
+    ditherEl(btn, true, SWAP_MS);
     if (focus) btn.focus();
   }
   function cancelTankUndo() {            // something else needs the undo button: put "new tank" straight back
@@ -3183,7 +3564,7 @@
 
   // ---- about: halftone glass with the name, credit and coffee
   const about = $('about');
-  function openAbout() { drawAboutEdge(); document.body.classList.add('about-open'); about.classList.add('on'); ditherEl(about, true, 420); $('aboutBtn').setAttribute('aria-expanded', 'true'); setTimeout(() => $('aboutClose').focus(), 50); }
+  function openAbout() { loadCoffee(); drawAboutEdge(); document.body.classList.add('about-open'); about.classList.add('on'); ditherEl(about, true, 420); $('aboutBtn').setAttribute('aria-expanded', 'true'); setTimeout(() => $('aboutClose').focus(), 50); }
   function closeAbout() { document.body.classList.remove('about-open'); $('aboutBtn').setAttribute('aria-expanded', 'false'); $('aboutBtn').focus(); ditherEl(about, false, 360, () => { about.classList.remove('on'); setMask(about, null); }); }
   // dots around the card, big at the edge and shrinking with distance: a glow made of halftone
   function drawAboutEdge() {
@@ -3205,9 +3586,41 @@
   }
   window.addEventListener('resize', () => { if (about.classList.contains('on')) drawAboutEdge(); });
   $('aboutBtn').onclick = openAbout;
+
+  // ---- "Buy me a coffee": Buy Me a Coffee's own widget, so people can chip in without leaving Dither.
+  // Its script is fetched the first time the about card opens (never during focus). It builds its own floating
+  // button, which is hidden in CSS; the button in the card opens its panel instead. If the script can't load
+  // (offline, or a content blocker), the button is still a plain link to the page.
+  let coffeeState = '';
+  function loadCoffee() {
+    if (coffeeState) return;
+    coffeeState = 'loading';
+    const sc = document.createElement('script');
+    Object.entries({ name: 'BMC-Widget', cfasync: 'false', id: 'efrainfm', description: 'Support me on Buy me a coffee!', message: '',
+      color: '#0f2a3d', position: 'Right', x_margin: '18', y_margin: '18' }).forEach(([k, v]) => sc.setAttribute(`data-${k}`, v));
+    sc.src = 'https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js';
+    sc.onload = () => {
+      window.dispatchEvent(new Event('DOMContentLoaded'));     // it builds itself on page load, which has already happened
+      coffeeState = document.getElementById('bmc-wbtn') ? 'ready' : 'failed';
+    };
+    sc.onerror = () => { coffeeState = 'failed'; };
+    document.body.appendChild(sc);
+  }
+  $('coffeeBtn').addEventListener('click', (ev) => {
+    const w = document.getElementById('bmc-wbtn');
+    if (coffeeState !== 'ready' || !w) return;               // not ready: the link opens the page in a new tab
+    ev.preventDefault();
+    w.click();
+  });
   $('aboutClose').onclick = closeAbout;
   about.addEventListener('mousedown', (ev) => { if (ev.target === about) closeAbout(); });
-  about.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeAbout(); } });
+  about.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    ev.stopPropagation();
+    const fr = document.getElementById('bmc-iframe');
+    if (fr && fr.style.opacity === '1') { fr.parentElement.click(); return; }      // the coffee panel is open: Esc closes that first
+    closeAbout();
+  });
 
   function rescape() {
     if (staticAnim || undoWhere === 'tank' || $('rescapeBtn').hidden) return;     // one tank change at a time
@@ -3336,17 +3749,11 @@
   function brainLeave() { if (brain && brain.phase !== 'leaving') { brain.phase = 'leaving'; brain.leave = 0; } if (state.brain) { state.brain = false; save(); } }
   function pokeBrain() { if (!brain || brain.phase !== 'float') return; brain.vel.y -= 9; addRipple(brain.pos.x, brain.pos.z, 1.6, U.uTime.value); splash(brain.pos.x, U.uWater.value, brain.pos.z, 60, 1.6); }
   function syncBrainUI() { document.body.classList.toggle('has-brain', !!state.brain); }
-  function doneWithWork() {
-    if (brain) return;
-    endFollow(false);
-    hideUndo();
-    // the brain takes the new koi's place: drop the koi this session earned before the reset would reveal it
-    if (state.pendingFish > 0) { state.fish.splice(state.fish.length - state.pendingFish, state.pendingFish); state.pendingFish = 0; syncFish(); }
-    if (state.timer.mode !== 'idle') withTimerDither(() => { timerReset(); });
-    dayPeek = false;
-    makeBrain(true); state.brain = true; save(); syncBrainUI(); updateTimerActions(); renderTimerText(true); announce();
-    startFollow(brain, true);                             // ride it down from the sky, then stay with it
-    $('live').textContent = 'Called it a day. Enjoy the rest of it.';
+  // the intro: on the title screen a giant brain splashes into the tank. It floats there (and stays across reloads)
+  // until the first Start, when it dithers away.
+  function brainIntro() {
+    if (brain || state.brain || state.timer.mode !== 'idle') return;
+    makeBrain(true); state.brain = true; save(); syncBrainUI();
   }
 
   // ================================================================ music: lofi under focus and rest
@@ -3408,11 +3815,11 @@
   }
   function primeMusic() {                    // called inside a click, so browsers allow the sound to start
     audio();
-    const m = state.timer.mode, k = m === 'focus-run' ? 'focus' : m === 'rest-run' ? 'rest' : null;
+    const k = musicKey();
     if (k && !music.playing[k]) playMusic(k);
   }
   function musicTick(dt) {
-    const m = state.timer.mode, k = m === 'focus-run' ? 'focus' : m === 'rest-run' ? 'rest' : null;
+    const k = musicKey();
     if (k !== music.last) { if (k) music.startedAt[k] = performance.now(); music.last = k; }
     for (const kk of ['focus', 'rest']) {
       let target = 0;
@@ -3429,7 +3836,7 @@
   }
   // Browsers only let sound start from a tap or click. So when you come back to a page with a session running
   // (a reload, or a phone that slept), the music waits: the first tap anywhere starts it, and a play button shows until then.
-  function musicKey() { const m = state.timer.mode; return m === 'focus-run' ? 'focus' : m === 'rest-run' ? 'rest' : null; }
+  function musicKey() { const tm = state.timer; return tm.mode !== 'run' ? null : tm.kind === 'focus' ? 'focus' : 'rest'; }    // both rests share the relaxing track
   function musicStalled() {
     const k = musicKey();
     if (!k || state.musicMuted || state.musicVol <= 0.001 || remaining() < 4) return false;
@@ -3446,7 +3853,7 @@
     const want = musicStalled();
     if (want === !b.hidden) return;
     b.hidden = !want;
-    if (want && !document.body.classList.contains('idle')) ditherEl(b, true, 220);
+    if (want) ditherEl(b, true, 220);
   }
   window.addEventListener('pointerdown', () => { if (musicStalled()) resumeMusic(); }, true);
 
@@ -3520,29 +3927,30 @@
   ['mouseenter', 'focus'].forEach((ev) => $('timerHit').addEventListener(ev, () => { hovering = true; }));
   ['mouseleave', 'blur'].forEach((ev) => $('timerHit').addEventListener(ev, () => { hovering = false; }));
 
-  $('resetBtn').onclick = resetTimerUndoable;
   const volBtn = $('volBtn'), volSlider = $('volSlider');
   function setIcon(el, name) { el.style.setProperty('--m', svgURL(ICONS[name])); const h = el.parentElement.querySelector('.ht-halo'); if (h) h.style.setProperty('--mb', svgURL(ICONS[name], true)); }
   function syncVolUI() {
     const off = state.musicMuted || state.musicVol <= 0.001;
     setIcon(volBtn.querySelector('.ht-icon'), off ? 'mute' : 'vol');
     volBtn.setAttribute('aria-label', off ? 'Unmute music' : 'Mute music'); volBtn.setAttribute('aria-pressed', String(off));
-    volBtn.querySelector('.tip').textContent = off ? 'unmute' : 'mute';
+    volBtn.querySelector('.tip').textContent = off ? 'Unmute' : 'Mute';
     volSlider.value = String(state.musicMuted ? 0 : state.musicVol);
   }
   volBtn.onclick = () => { if (state.musicMuted || state.musicVol <= 0.001) { state.musicMuted = false; if (state.musicVol <= 0.001) state.musicVol = 0.5; } else state.musicMuted = true; save(); syncVolUI(); primeMusic(); };
   volSlider.oninput = () => { state.musicVol = +volSlider.value; state.musicMuted = state.musicVol <= 0.001; save(); syncVolUI(); primeMusic(); };
   syncVolUI();
   $('playBtn').onclick = () => { resumeMusic(); setTimeout(syncPlayBtn, 200); };
-  $('doneBtn').onclick = doneWithWork;
+  $('startBtn').onclick = timerPress;
+  $('pauseBtn').onclick = timerPress;
+  $('skipBtn').onclick = skipSession;
+  document.querySelectorAll('#modeTabs button[data-kind]').forEach((b) => { b.onclick = () => chooseKind(b.dataset.kind); });
   $('addPom').onclick = () => { completePom(false); revealFish(); };
   // testing: jump to 3 seconds before the end of whichever phase is next
   $('endSoon').onclick = () => {
     audio();
     const tm = state.timer;
-    if (tm.mode === 'focus-done') { startPhase('rest'); revealFish(); }
-    else if (tm.mode === 'idle' || tm.mode === 'rest-done') startPhase('focus');
-    state.timer.mode = state.timer.mode.replace('-pause', '-run');
+    if (tm.mode === 'idle' || tm.mode === 'ready') startSession(tm.mode === 'idle' ? 'focus' : tm.kind);
+    state.timer.mode = 'run';
     state.timer.endsAt = Date.now() + 3000;
     save(); renderTimerText(true);
   };
@@ -3551,9 +3959,10 @@
     const sel = $('findSel');
     const opt = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; };
     sel.appendChild(opt('', 'none'));
-    [['common', 'Common'], ['rare', 'Rare'], ['kitsch', 'Kitsch'], ['ultra', 'Ultra rare']].forEach(([k, label]) => {
+    const groups = [['Common', COMMONS], ...['Common', 'Uncommon', 'Rare', 'Ultra rare'].map((tier) => [`Special: ${tier.toLowerCase()}`, Object.keys(SPECIALS).filter((t) => SPECIAL_TIER(t) === tier)])];
+    groups.forEach(([label, list]) => {
       const g = document.createElement('optgroup'); g.label = label;
-      FOUND[k].forEach((t) => g.appendChild(opt(t, FOUND_NAMES[t])));
+      list.forEach((t) => g.appendChild(opt(t, FOUND_NAMES[t])));
       sel.appendChild(g);
     });
     $('findPlace').onclick = () => placeFound(sel.value || null);
@@ -3637,6 +4046,7 @@
     return [(window.innerWidth - vw) / 2 + (v.x * 0.5 + 0.5) * vw, (window.innerHeight - vh) / 2 + (1 - (v.y * 0.5 + 0.5)) * vh];
   }
   function pxPerUnit(p) { const [ax] = toScreen(p), [bx] = toScreen(p.clone().add(V(1, 0, 0).applyQuaternion(camera.quaternion))); return Math.abs(bx - ax); }
+  const HIT_Y = { tarot: 2.7, diver: 4, ship: 2.6, sub: 1.4, coral: 2.6, marimo: 1.5, inhaler: 2, chest: 1.6 }, HIT_R = { ship: 5, sub: 3.8, coral: 3.6, tarot: 3.4 };
   function hitTest(cx, cy) {
     let best = null, bd = Infinity;
     for (const o of fishObjs) {
@@ -3644,10 +4054,11 @@
       const [sx, sy] = toScreen(o.p), r = Math.max(16, pxPerUnit(o.p) * o.f.size * 2.6), d = Math.hypot(sx - cx, sy - cy);
       if (d < r && d < bd) { bd = d; best = { fish: o }; }
     }
-    if (found && !found.anim) {
-      const c = found.root.localToWorld(V(0, found.type === 'cd' ? 1.9 : 1.2, 0));
-      const [sx, sy] = toScreen(c), r = Math.max(22, pxPerUnit(c) * found.sc * 3.2), d = Math.hypot(sx - cx, sy - cy);
-      if (d < r && d < bd) { bd = d; best = { item: found }; }
+    for (const f of finds) {
+      if (f.anim || f.drop) continue;
+      const c = f.root.localToWorld(V(0, HIT_Y[f.type] || 1.2, 0));
+      const [sx, sy] = toScreen(c), r = Math.max(22, pxPerUnit(c) * f.sc * (HIT_R[f.type] || 3.2)), d = Math.hypot(sx - cx, sy - cy);
+      if (d < r && d < bd) { bd = d; best = { item: f }; }
     }
     return best;
   }
@@ -3712,8 +4123,8 @@
   function startFollow(o, cine) {
     if (!o) return;
     if (!follow) follow = { back: state.zoomTarget };       // where to go back to afterwards
-    follow.o = o; follow.cine = !!cine; follow.brain = o === brain;
-    state.zoomTarget = follow.brain ? brainZoom() : zoomMin(); zoomRate = cine ? 1.4 : 2.2;
+    follow.o = o; follow.cine = !!cine; follow.brain = o === brain; follow.find = finds.includes(o);
+    state.zoomTarget = follow.brain ? brainZoom() : follow.find ? zoomMin() * 1.5 : zoomMin(); zoomRate = cine ? 1.4 : 2.2;
   }
   function endFollow(slow) {
     if (!follow) return;
@@ -3764,7 +4175,7 @@
     const h = hitTest(ev.clientX, ev.clientY);
     if (h && h.fish) { pokeFish(h.fish); startFollow(h.fish, false); return; }
     if (follow) { endFollow(false); return; }                  // a click anywhere else goes back to the whole tank
-    if (h && h.item) { h.item.anim = { t: 0 }; return; }
+    if (h && h.item) { pokeFind(h.item); return; }
     const z = zoneAt(ev.clientX, ev.clientY);
     if (!z && baseHit(ev.clientX, ev.clientY)) { toggleBase(); return; }
     if (z === 'l') turn(-1);
@@ -3791,42 +4202,33 @@
     else if (ev.key.toLowerCase() === 'i' && document.body.classList.contains('admin')) document.body.classList.toggle('show-stats');
     else return;
   });
+  // The controls are always there. While a focus session runs they fade back after a few still seconds, so the
+  // timer is the one thing on screen; moving the pointer, a tap or a key brings them right back.
   let idleTimer = 0, overControls = false;
-  const IDLE_MS = 6000;
+  const QUIET_MS = 4000;
   let keyboardUser = false;      // focus only keeps the controls up for people moving around with the keyboard
   window.addEventListener('keydown', (ev) => { if (ev.key === 'Tab' || ev.key.startsWith('Arrow')) keyboardUser = true; }, true);
   window.addEventListener('pointermove', () => { keyboardUser = false; }, { passive: true });
-  const busy = () => overControls || about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging
-    || (keyboardUser && !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.dock, .rdock, .undo-wrap, .drawer')));
-  const idleEls = () => [...document.querySelectorAll('.dock, .rdock, .undo-wrap, .tune, .scrim')];
-  function goIdle() {
-    if (busy()) { idleTimer = setTimeout(goIdle, 1000); return; }
-    idleEls().forEach((el) => ditherEl(el, false, 520));
-    setTimeout(() => { if (!document.body.classList.contains('idle-pending')) return; document.body.classList.remove('idle-pending'); document.body.classList.add('idle'); idleEls().forEach((el) => setMask(el, null)); }, 540);
-    document.body.classList.add('idle-pending');
+  const CONTROLS = '.dock, .rdock, .undo-wrap, .mode-tabs, .timer-actions, .drawer';
+  const busy = () => overControls || about.classList.contains('on') || $('drawer').classList.contains('on') || state.dragging || !!armed
+    || (keyboardUser && !!(document.activeElement && document.activeElement.closest && document.activeElement.closest(CONTROLS)));
+  const focusRunning = () => state.timer.mode === 'run' && state.timer.kind === 'focus';
+  function goQuiet() {
+    if (!focusRunning()) return;
+    if (busy()) { idleTimer = setTimeout(goQuiet, 1000); return; }
+    document.body.classList.add('quiet');
   }
   function wake(ev) {
     if (ev && ev.type === 'mousemove' && ev.movementX === 0 && ev.movementY === 0) return;      // a page repaint isn't a person moving
-    const b = document.body, was = b.classList.contains('idle') || b.classList.contains('idle-pending');
-    b.classList.remove('idle', 'idle-pending');
-    if (was) idleEls().forEach((el) => ditherEl(el, true, 220));
-    clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, IDLE_MS);
+    document.body.classList.remove('quiet');
+    clearTimeout(idleTimer);
+    if (focusRunning()) idleTimer = setTimeout(goQuiet, QUIET_MS);
   }
-  // the controls live in a band along the bottom: they show when the pointer comes near it (or a tap lands there on
-  // a phone, or keyboard focus reaches them), and go away a moment after it leaves or stops moving. Turning or
-  // tapping the tank never brings them up.
-  const ZONE = () => Math.max(120, Math.min(170, window.innerHeight * 0.18));
-  const inZone = (y) => y > window.innerHeight - ZONE();
-  window.addEventListener('mousemove', (ev) => {
-    if (ev.movementX === 0 && ev.movementY === 0) return;            // a repaint isn't a person moving
-    if (state.dragging) return;
-    if (inZone(ev.clientY) || overControls) wake();
-    else if (!busy() && !document.body.classList.contains('idle')) { clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, 900); }
-  }, { passive: true });
-  window.addEventListener('pointerdown', (ev) => { if (ev.pointerType !== 'mouse' && inZone(ev.clientY)) wake(); }, { passive: true });
-  window.addEventListener('focusin', (ev) => { if (ev.target.closest && ev.target.closest('.dock, .rdock, .undo-wrap, .tune, .drawer')) wake(); });
-  document.querySelectorAll('.dock, .rdock, .undo-wrap, .tune, .drawer').forEach((el) => { el.addEventListener('mouseenter', () => { overControls = true; wake(); }); el.addEventListener('mouseleave', () => { overControls = false; }); });
-  document.documentElement.addEventListener('mouseleave', () => { overControls = false; clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, 1200); });   // pointer left the window
+  window.addEventListener('mousemove', (ev) => { if (!state.dragging) wake(ev); }, { passive: true });
+  window.addEventListener('pointerdown', () => wake(), { passive: true });
+  window.addEventListener('keydown', () => wake());
+  window.addEventListener('focusin', (ev) => { if (ev.target.closest && ev.target.closest(CONTROLS)) wake(); });
+  document.querySelectorAll(CONTROLS).forEach((el) => { el.addEventListener('mouseenter', () => { overControls = true; wake(); }); el.addEventListener('mouseleave', () => { overControls = false; wake(); }); });
   // admin view: type the word anywhere (not in a field)
   let typed = '';
   const setAdmin = (on) => { document.body.classList.toggle('admin', on); if (!on) { $('drawer').classList.remove('on'); $('tune').classList.remove('on'); } try { localStorage.setItem('dither.admin', on ? '1' : '0'); } catch (e) { /* fine */ } };
@@ -3850,18 +4252,28 @@
     lastSim = now;
     // the tank turns with the clock: six slow turns over a focus session (one every ~4 minutes), landing face-on at 0:00.
     // Paused, it holds; resting, it faces you; idle, it sways gently.
-    const tmode = state.timer.mode, inFocus = tmode === 'focus-run' || tmode === 'focus-pause';
+    const tmode = state.timer.mode, inFocus = state.timer.kind === 'focus' && (tmode === 'run' || tmode === 'pause');
     const progress = inFocus ? clamp(1 - remaining() / (FOCUS_MIN * 60), 0, 1) : 0;
-    if (!inFocus && state.lastProgress > 0) {          // fold the turns in so nothing jumps; a finished session lands face-on for the fish
-      const v = state.view + state.lastProgress * TURNS * 360;
-      state.view = state.lastProgress > 0.995 ? Math.round(v / 360) * 360 : Math.round(v / 90) * 90;
+    // The turns build up frame by frame instead of following the clock directly, so coming back to the tab
+    // (or reloading mid-session) never sends the tank whirling to catch up. Any jump in time is skipped, and
+    // the spin drifts back into phase slowly (2°/s on top of the ~1.4°/s turn) so it still tends to land face-on.
+    if (inFocus) {
+      if (state.lastProgress == null) state.lastProgress = progress;
+      const step = (progress - state.lastProgress) * TURNS * 360;
+      if (step > 0 && step < 8 * dt + 0.5) state.spin += step;
+      let e = ((progress * TURNS * 360 - state.spin) % 360 + 540) % 360 - 180;
+      state.spin += clamp(e, -2 * dt, 2 * dt);
+      state.lastProgress = progress;
+    } else if (state.lastProgress != null) {        // fold the turns in so nothing jumps; a finished session lands face-on for the fish
+      const v = state.view + state.spin, r360 = Math.round(v / 360) * 360;
+      state.view = Math.abs(v - r360) < 40 ? r360 : Math.round(v / 90) * 90;
+      state.spin = 0; state.lastProgress = null;
     }
-    state.lastProgress = progress;
     const ampT = tmode === 'idle' && !state.dragging ? 24 : 0;
     state.driftAmp += (ampT - state.driftAmp) * (1 - Math.exp(-dt * 0.6));
     if (state.driftAmp < 0.5 && ampT === 0) state.driftPhase = 0;
     else state.driftPhase += dt * (Math.PI * 2 / 60);      // idle: one gentle back-and-forth a minute
-    const azT = state.view + progress * TURNS * 360 + state.driftAmp * Math.sin(state.driftPhase);
+    const azT = state.view + state.spin + state.driftAmp * Math.sin(state.driftPhase);
     state.az += (azT - state.az) * (1 - Math.exp(-dt * (state.dragging ? 14 : 1.6)));
     state.zoom += (state.zoomTarget - state.zoom) * (1 - Math.exp(-dt * zoomRate));
     // growth + water ease toward their targets
@@ -3885,18 +4297,22 @@
     U.uTime.value = t;
     if (now - lastSlow > 1000) {
       lastSlow = now;
-      if (state.fishDay !== today()) { state.fishDay = today(); state.fish = []; state.pendingFish = 0; syncFish(); save(); }
+      if (state.fishDay !== today()) { state.fishDay = today(); state.fish = []; state.pendingFish = 0; state.items = []; state.pendingItem = 0; syncFish(); syncItems(); save(); }
       applySky(skyDate()); updateSkyLabel(); tickTimer();
     }
     simulate(dt, t);
     // follow camera: it stays on the fish (a new koi's entrance included) until you tap away, press Esc or zoom out
-    if (follow && (follow.brain ? (follow.o !== brain || brain.phase === 'leaving') : !fishObjs.includes(follow.o))) endFollow(false);
+    if (follow && (follow.brain ? (follow.o !== brain || brain.phase === 'leaving') : follow.find ? !finds.includes(follow.o) : !fishObjs.includes(follow.o))) endFollow(false);
     {
       const dist = baseDistance() * state.zoom, k = clamp((dist - CLOSE_DIST * 1.15) / (CLOSE_DIST * 2), 0, 1);
       const elWant = 4 + 9 * k * k * (3 - 2 * k);
       camEl += ((follow && follow.brain ? Math.max(12, elWant) : elWant) - camEl) * 0.12;   // close in, the camera comes down level with the fish (but looks down a little on the brain)
       if (follow && follow.brain) target.lerp(follow.o.pos, follow.cine ? 0.3 : 0.2);
-      else if (follow) {
+      else if (follow && follow.find) {
+        const f = follow.o, want = f.root.localToWorld(V(0, (HIT_Y[f.type] || 1.2), 0));
+        if (want.y < U.uWater.value) want.y = Math.min(want.y + 1.5, U.uWater.value - 1.2 - Math.sin(T.MathUtils.degToRad(camEl)) * dist);
+        target.lerp(want, follow.cine ? 0.3 : 0.2);
+      } else if (follow) {
         const o = follow.o;
         if (!(follow.cine && o.mode === 'intro' && !o.intro)) {         // a new koi: wait until it's placed in the sky
           const want = o.p.clone();
@@ -3932,7 +4348,8 @@
   window.addEventListener('resize', () => { layout(); renderTimerText(true); });
   layout();
   if (!state.seed) state.seed = randomSeed();
-  if (state.pendingFish && state.timer.mode !== 'focus-done') state.pendingFish = 0;
+  if (state.pendingFish && state.timer.mode !== 'ready') state.pendingFish = 0;
+  if (state.pendingItem && state.timer.mode !== 'ready') state.pendingItem = 0;
   U.uGrowth.value = growthU(state.growth);
   U.uWater.value = TANK.h * (0.955 - 0.012 * state.evap);
   applySky(new Date());
@@ -3940,10 +4357,11 @@
   if (state.brain) makeBrain(false);
   syncBrainUI();
   save(); updateDrawer(); updateSkyLabel();
-  const go = () => { renderTimerText(true); drawCdLabel(); requestAnimationFrame(loop); };
+  const go = () => { layout(); renderTimerText(true); placeTimerActions(); requestAnimationFrame(loop); };
   (document.fonts && document.fonts.ready ? Promise.race([document.fonts.load(`40px ${FONT_PIXEL}`).then(() => document.fonts.ready), new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve()).then(go);
-  document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { renderTimerText(true); drawCdLabel(); });
+  document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { renderTimerText(true); });
   wake();
+  setTimeout(brainIntro, 1600);
 
   // ---- fish lab hooks: the lab build (npm run lab) adds a panel that drives these
   window.__ditherFishLab = {
@@ -3961,12 +4379,13 @@
     slow(f) { timeScale = f; },
   };
   window.dither = window.shoal = {
-    state, completePom, timerPress, rescape, zoneAt, tankScreenBox, turn,
-    foundScreen() { if (!found) return null; const p = found.root.position.clone().add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
+    state, completePom, timerPress, chooseKind, skipSession, rescape, zoneAt, tankScreenBox, turn,
+    followFind(i = 0, z) { if (finds[i]) { startFollow(finds[i], false); if (z) state.zoomTarget = state.zoom = z; } },
+    foundScreen(i = 0) { const f = finds[i]; if (!f) return null; const p = f.root.localToWorld(V(0, HIT_Y[f.type] || 1.2, 0)).add(V(0, 2.5, 0)).project(camera); return [(p.x * 0.5 + 0.5) * window.innerWidth, (1 - (p.y * 0.5 + 0.5)) * window.innerHeight]; },
     setZoom(z) { state.zoom = state.zoomTarget = z; },
     slow(f) { timeScale = f; },
     rescape,
-    doneWithWork, brainInfo() { return brain ? { phase: brain.phase, y: +brain.pos.y.toFixed(1), water: +U.uWater.value.toFixed(1) } : null; },
+    brainIntro, brainInfo() { return brain ? { phase: brain.phase, y: +brain.pos.y.toFixed(1), water: +U.uWater.value.toFixed(1) } : null; },
     musicInfo() { return ['focus', 'rest'].map((k) => `${k}:${music.playing[k] ? 'playing' : 'stopped'}@${music.level[k].toFixed(2)}${music.buf[k] ? ` loop ${music.buf[k].start.toFixed(3)}-${music.buf[k].end.toFixed(2)}s` : ''}${music.src[k] ? ' (source live)' : ''}`).join(' | '); },
     ditherPeek(sel, k) { const el = document.querySelector(sel); el._dither = (el._dither || 0) + 1; setMask(el, k); },
     manual() { manualMode = true; fakeNow = performance.now(); lastSim = fakeNow; },
@@ -3978,7 +4397,7 @@
     baseBox() { let x0 = 1e9, x1 = -1e9, y0 = 1e9; for (let k = 0; k < 24; k++) { const p = boundary((k / 24) * Math.PI * 2, 1.07).setY(-2.6).project(camera); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); } return { x0, x1, y0, tank: tankScreenBox().y0, rows: grid.rows * grid.chCss }; },
     baseState() { return { lit: baseLit(), glow: +U.uGlow.value.toFixed(2), target: +glowTarget.toFixed(2), night: skyInfo.night, on: state.baseOn }; },
     buttons() { return JSON.parse(JSON.stringify(btnContrast)); },
-    info() { return { fish: fishObjs.map((o) => [o.mode, +(o.mt || 0).toFixed(2), +o.p.x.toFixed(1), +o.p.y.toFixed(1), +o.p.z.toFixed(1), +o.mesh.scale.x.toFixed(2)]), pending: state.pendingFish, total: state.fish.length, found: found && found.type, anim: !!(found && found.anim), animT: found && found.anim ? +found.anim.t.toFixed(2) : -1, zoom: +state.zoom.toFixed(2), timer: state.timer.mode, splashes: splashes.length, sparkles: sparkles.length }; },
+    info() { return { fish: fishObjs.map((o) => [o.mode, +(o.mt || 0).toFixed(2), +o.p.x.toFixed(1), +o.p.y.toFixed(1), +o.p.z.toFixed(1), +o.mesh.scale.x.toFixed(2)]), pending: state.pendingFish, total: state.fish.length, finds: finds.map((f) => `${f.type}${f.common ? '*' : ''}${f.drop ? ' dropping' : f.anim ? ' anim' : ''}`), items: state.items.map((i) => i.type), pendingItem: state.pendingItem, zoom: +state.zoom.toFixed(2), timer: `${state.timer.kind}-${state.timer.mode}`, cycle: state.cycle, splashes: splashes.length, sparkles: sparkles.length }; },
     fishRot(i) { const o = fishObjs[i]; if (!o) return null; const r = o.mesh.rotation; o.mesh.updateMatrixWorld(); const n = V(1, 0, 0).transformDirection(o.mesh.matrixWorld); return { r: [r.x, r.y, r.z, r.order].map((v) => (typeof v === 'number' ? +v.toFixed(2) : v)), nose: [n.x, n.y, n.z].map((v) => +v.toFixed(2)), prof: o.intro && +o.intro.profile.toFixed(2) }; },
     fishScreen(i) { const o = fishObjs[i]; return o ? toScreen(o.p) : null; },
     set(o) {
@@ -3990,11 +4409,14 @@
       if ('fish' in o) { for (let i = 0; i < o.fish; i++) state.fish.push(newFish()); syncFish(); }
       if ('hover' in o) hovering = o.hover;
       if ('find' in o) placeFound(o.find);
-      if ('poke' in o && found) found.anim = { t: 0 };
-      if ('pokeFish' in o && fishObjs[o.pokeFish]) pokeFish(fishObjs[o.pokeFish]);
+      if ('poke' in o && finds[o.poke | 0]) pokeFind(finds[o.poke | 0]);
+      if ('item' in o) { state.items.push(o.item && o.item.type ? o.item : { type: o.item, seed: Math.floor(Math.random() * 1e9) }); state.pendingItem = (state.pendingItem || 0) + 1; save(); revealItem(o.ride !== false); }
+      if ('pokeFish' in o && fishObjs[o.pokeFish]) pokeFish(fishObjs[o.pokeFish], o.leap);
       if ('reveal' in o) { completePom(false); revealFish(); }
+      if ('brain' in o && !o.brain) { brainLeave(); }
       if ('az' in o) { state.view = o.az; state.az = o.az; state.driftAmp = 0; }
-      if ('timer' in o) { state.timer = o.timer; renderTimerText(true); }
+      if ('cycle' in o) { state.cycle = o.cycle; renderTimerText(true); }
+      if ('timer' in o) { state.timer = normTimer(o.timer); save(); renderTimerText(true); announce(); }
     },
   };
 })();
