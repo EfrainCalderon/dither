@@ -170,6 +170,7 @@
   .title { margin: 0; font-size: var(--t-lg); line-height: 1.2; font-weight: 400; white-space: nowrap; }
   @media (max-width: 420px) { .title { font-size: var(--t-md); } .glass { padding-left: 24px; padding-right: 24px; } }
   .title a { position: relative; text-decoration: none; }
+  .title > span { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }   /* 5 taps here turns on admin, so no text selection */
   .title a::after { content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 2px; border-radius: 1px; background: var(--ink); opacity: 0.85; transition: opacity 200ms, transform 200ms; }
   .title a:hover::after { opacity: 1; transform: scaleY(1.5); }
   /* "Buy me a coffee": the words, then a round cup button (it opens Buy Me a Coffee's own panel; see loadCoffee in code) */
@@ -285,7 +286,7 @@
 <button class="tune" id="tune" aria-expanded="false" aria-controls="drawer">admin</button>
 <button class="tune tune-x" id="adminX" aria-label="Exit admin mode" title="Exit admin mode">×</button>
 <div class="drawer" id="drawer" role="region" aria-label="Admin controls">
-  <h2>Admin · × or type “Pynchon” to leave</h2>
+  <h2>Admin · × to leave</h2>
   <div class="field">
     <div class="top"><label for="growth">Tank time</label><b id="growthVal">0 poms</b></div>
     <div class="row"><input id="growth" type="range" min="0" max="10" step="0.05" value="0"><button id="growthNow" class="on">now</button></div>

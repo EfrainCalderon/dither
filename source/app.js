@@ -1,5 +1,5 @@
 /*
-  Dither 1.5.3
+  Dither 1.5.4
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -4242,6 +4242,19 @@
   const setAdmin = (on) => { document.body.classList.toggle('admin', on); if (!on) { $('drawer').classList.remove('on'); $('tune').classList.remove('on'); } try { localStorage.setItem('dither.admin', on ? '1' : '0'); } catch (e) { /* fine */ } };
   try { setAdmin(localStorage.getItem('dither.admin') === '1'); } catch (e) { /* fine */ }
   $('adminX').onclick = () => { setAdmin(false); $('live').textContent = 'Admin controls off.'; };
+  // admin view on a phone: tap "Dither by" in the About card 5 times in a row (each tap within 1.5s of the last)
+  let titleTaps = 0, lastTitleTap = 0;
+  $('appName').firstElementChild.addEventListener('click', () => {
+    const now = performance.now();
+    titleTaps = now - lastTitleTap < 1500 ? titleTaps + 1 : 1;
+    lastTitleTap = now;
+    if (titleTaps < 5) return;
+    titleTaps = 0;
+    const on = !document.body.classList.contains('admin');
+    setAdmin(on);
+    closeAbout();
+    $('live').textContent = on ? 'Admin controls on.' : 'Admin controls off.';
+  });
   window.addEventListener('keydown', (ev) => {
     if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT' || ev.metaKey || ev.ctrlKey || ev.altKey || ev.key.length !== 1) return;
     typed = (typed + ev.key.toLowerCase()).slice(-7);
