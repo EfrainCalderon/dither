@@ -1,5 +1,5 @@
 /*
-  Dither 1.5.4
+  Dither 1.5.5
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -3938,6 +3938,8 @@
   $('skipBtn').onclick = skipSession;
   document.querySelectorAll('#modeTabs button[data-kind]').forEach((b) => { b.onclick = () => chooseKind(b.dataset.kind); });
   $('addPom').onclick = () => { completePom(false); revealFish(); };
+  // testing: earn a special find now, as a long rest would (next in the rotation, falls in with the camera following)
+  $('addFind').onclick = () => { state.items.push(newItem()); state.pendingItem = (state.pendingItem || 0) + 1; save(); revealItem(true); };
   // testing: jump to 3 seconds before the end of whichever phase is next
   $('endSoon').onclick = () => {
     audio();
