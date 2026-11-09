@@ -1,5 +1,5 @@
 /*
-  Dither 1.5.6
+  Dither 1.5.7
   ------------------------------------------------------------
   A pomodoro timer that lives in a small halftone aquarium.
   - Each finished 25-minute focus session adds one koi (they reset at midnight)
@@ -694,21 +694,24 @@
         }
         vec4 o = texelFetch(uOverlay, ivec2(cell), 0);
         float fill = o.r * o.a, glow = o.g * o.a;
-        // blue marks ink drawn hollow (the digits while paused): only the cells on the glyph's edge keep a dot
-        bool hollow = o.b * o.a > 0.5, edge = false;
-        if (hollow && fill > 0.35) {
-          for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) { vec4 n = texelFetch(uOverlay, ivec2(cell) + ivec2(dx, dy), 0); if (n.r * n.a <= 0.35) edge = true; }
-        }
-        if (fill > 0.35 && (!hollow || edge) && !(uOverlayDim < 0.99 && bayer4(cell) > 0.6) && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
+        // blue marks ink drawn hollow (the digits while paused): no fill at all, just the outline ring below, in the ink color
+        bool hollow = o.r * o.a > 0.01 && o.b > 0.5 * o.r;     // every inked cell of a paused digit, even the half-covered ones at its edge
+        if (fill > 0.35 && !hollow && !(uOverlayDim < 0.99 && bayer4(cell) > 0.6) && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
           float r = rMax * (0.55 + 0.45 * fill) * (1.05 + 0.1 * uOverlayGlow);
           float m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
           gl_FragColor = vec4(mix(bg, uOverlayCol, m), 1.0); return;
         }
-        // the digits' outline: a ring of dots in a contrasting color, one cell wide
+        // the digits' outline: a ring of dots in a contrasting color, one cell wide.
+        // Around hollow (paused) digits the ring is the only thing drawn, so it takes the ink color instead: blue by day, white at night.
         if (fill <= 0.35 && cell.x >= uOvRect.x && cell.y >= uOvRect.y && cell.x <= uOvRect.z && cell.y <= uOvRect.w && !(uTimerDither > 0.001 && bay8(cell) < uTimerDither)) {
-          float nb = 0.0;
-          for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) { vec4 n = texelFetch(uOverlay, ivec2(cell) + ivec2(dx, dy), 0); nb = max(nb, n.r * n.a); }
-          if (nb > 0.35) {
+          float nb = 0.0; bool nh = false;
+          for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) { vec4 n = texelFetch(uOverlay, ivec2(cell) + ivec2(dx, dy), 0); float nf = n.r * n.a; nb = max(nb, nf); if (nf > 0.35 && n.b > 0.5 * n.r) nh = true; }
+          if (nb > 0.35 && nh) {
+            if (!(uOverlayDim < 0.99 && bayer4(cell) > 0.6)) {
+              float r = rMax * (1.0 + 0.1 * uOverlayGlow), m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
+              gl_FragColor = vec4(mix(bg, uOverlayCol, m), 1.0); return;
+            }
+          } else if (nb > 0.35) {
             float r = rMax * 0.98, m = 1.0 - smoothstep(r - 0.9, r + 0.9, length(q));
             gl_FragColor = vec4(mix(bg, uOutlineCol, m * (uOverlayDim < 0.99 ? 0.55 : 0.9)), 1.0); return;
           }
